@@ -37,7 +37,7 @@ Log in to the ***RemoteAdmin*** account on every *remote and master PC* and fol
 1. Install Powershell ver 7.1 or later 
 2. In windows settings, set network to *private* 
 3. Open the PS terminal as administrator and launch `Enable-PSRemoting` command 
-4. **For the master PCC only**
+4. **For the master PC only**
     - Open the PS terminal and launch `Set-Item -Path WSMan:\localhost\client\TrustedHosts -Value *`  
     ***Disclaimer***: It's up to you to handle security issues. For example, the master PC should not be accessible to anyone other than you, and the RemoteAdmin password should be known only by you.
 
