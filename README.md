@@ -1,55 +1,59 @@
-# PC Lab Utility
-###### (1st draft)
+# Windows Lab Admin
 
-This utility is a module of Powershell cmdlets I use to administer ***school PC labs*** where I work as an IT assistant. 
+This module is a collection of cmdlets to administer a ***computer lab*** based on Windows OS.
 
-A typical *school PC lab* has 15 PCs with Windows OS, and I have to perform the same operation on each one like creating a new local account, setting a new password, restarting all computers, etc.
+A ***lab administrator*** usually has to perform the same operation on each computer like creating a new local account, setting a new password, restarting all computers, etc.
 
-This module enables me to perform those operations only once from my computer for every PC in the lab.
+***Windows Lab Admin*** module enables the administrator to perform those operations only once from his computer for every computer inside the lab.
+
+I use this module to administer the ***school computer labs*** where I work as an IT assistant. 
 
 
-### PS Remoting based
+### Based on Powershell Remoting Tecnology
 
-***PC Lab Utility*** is based on *Powershell Remoting Technology*. PS remoting enables you to execute tasks on a remote machine as if you were standing there executing yourself. When you run a command, it’s running on the remote computer and the results of that command come back to your computer.
+It's ***PS remoting*** that permits you to run commands on a remote machine as if you were standing there executing yourself. When you run a command, it’s running on the remote computer and the results of that command come back to your computer.
 
 ## Terminology
 
-#### PC Lab
-a space where the *master and remote PCs* are located, all connected to the same LAN, all equipped with Windows OS (10 or 11).
+**Windows Lab**  
+a computer lab where the administrator operates. Computers are equipped with Windows OS (10 or 11) and are connected to the same LAN.
 
-#### Master PC 
-the PC the administrator uses to control remote PCs, this PC can execute cmdlets on remote PCs.
+**Admin computer**  
+the computer that the administrator uses to run commands on remote computers.
 
-#### Remote PC
-the PCs available in the lab with similar hardware and software characteristics. They are remote-controlled from the master PC.
+**Remote computers**  
+the computers available in the lab, remote-controlled from the Admin computer. They have similar hardware and software characteristics.
 
-#### Common User
-a Windows local user account created on each remote PC with the same: `username`, `password`, and account type (Standard User or Administrator).
-
-These accounts never expire, the password never expires and can't be changed by the user.
+**Lab User Account**  
+a local user account created on each remote computer with the same: `username`, `password`, and account type (Standard User or Administrator).  
+These accounts never expire, the password never expires and can't be changed by the lab user.
   
-
 ## Getting the Lab ready
-Before using the Utility ensure you have an administrator local account on every remote and master PC with the same username and password. For example, name these special accounts ***RemoteAdmin*** but you can choose the name you prefer.
+At this time, you need to move from computer to computer in the lab to operate.
 
-Log in to the ***RemoteAdmin*** account on every *remote and master PC* and follow these steps
+Create the *Administrator* ***Lab User Account***, good usernames are ***Admin***, ***RemoteAdmin*** or ***PSAdmin***. You also need to create the same account on the ***Admin computer***.
 
-1. Install Powershell ver 7.1 or later 
-2. In windows settings, set network to *private* 
+Let's say you choose as username ***PSAdmin***.
+
+
+Log in to the every ***PSAdmin*** account and follow these steps
+
+1. Install Powershell ver 7.1+
+2. Set network to *private* in Windows settings
 3. Open the PS terminal as administrator and launch `Enable-PSRemoting` command 
-4. **For the master PC only**
+4. *Admin computer only*
     - Open the PS terminal and launch `Set-Item -Path WSMan:\localhost\client\TrustedHosts -Value *`  
-    ***Disclaimer***: It's up to you to handle security issues. For example, the master PC should not be accessible to anyone other than you, and the RemoteAdmin password should be known only by you.
+    ***Disclaimer***: you are responsible for handling security issues. For instance, the *Admin computer* should only be accessible to you, and the *PSAdmin* password should be known exclusively by you.
 
 ## Installation
-1. name a folder exactly `PCLabUtil` on your master PC and download in it the files: `config.json.example`, `PCLabUtil.psm1`, `install-module.ps1`;
-2. rename `config.json.example` in `config.json`;
-3. edit `config.json` filling in remote PC names in you lab. Don't care about Mac Addresses at this step;
-4. open the PS (v7.1+) terminal in `PCLabUtil` folder and execute the script `.\install-module.ps1`;
+1. Name a folder `WindowsLabAdmin` on the *Admin Computer* and download the files: `config.json.example`, `WindowsLabAdmin.psm1`, `install-module.ps1`
+2. Rename `config.json.example` in `config.json`
+3. Update `config.json` with remote computer names in your lab, disregarding Mac Addresses at this step.
+4. Open the PS terminal in the `WindowsLabAdmin` folder and run the script `.\install-module.ps1`
 
-You can also clone the repo and go through steps 2 to 4.
+You can also clone the repository and follow steps 2 to 4.
 
-Close and reopen terminal, then launch `get-command -Module PCLabUtil`, If the module has been correctly installed, you should see the list of cmdlets.
+Close and reopen the terminal. Then, launch `get-command -Module WindowsLabAdmin`. If the module has been installed correctly, you should see the list of cmdlets.
 
 ## Available cmdlets
 
