@@ -66,5 +66,5 @@ Close and reopen the terminal. Then, launch `get-command -Module WindowsLabAdmin
 `Show-Config`  
 `Start-LabComputer`  
 `Stop-LabComputer`  
-`Sync-LabComputerDate`
+`Sync-LabComputerDate`  
 `Test-LabComputerPrompt`

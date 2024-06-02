@@ -13,7 +13,7 @@ $configPath = Join-Path -Path $PSScriptRoot -ChildPath 'config.json'
 # read config file
 $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
 
-$remotecomputers = $config.remotecomputers
+$labComputerList = $config.labComputerList
 $macs = $config.macs
 
 
@@ -39,8 +39,8 @@ function Show-Config {
 
     Write-Host $t.Trim() -ForegroundColor DarkYellow
 
-    Write-Host 'Remote Computer: ' -NoNewline
-    Write-Host $remotecomputers -Separator ', '
+    Write-Host 'Lab Computer: ' -NoNewline
+    Write-Host $labComputerList -Separator ', '
 
     Write-Host 'Mac Addresses  : ' -NoNewline
     Write-Host $macs -Separator ', '
@@ -53,7 +53,7 @@ function Show-Config {
 
     Write-Host $t.Trim() -ForegroundColor DarkYellow
     Write-Host 'Trying to find Mac Addresses ...' 
-    foreach ($pc in $remotecomputers) {
+    foreach ($pc in $labComputerList) {
         $macAddress = Get-NetAdapter -CimSession $PC | Where-Object {$_.Status -eq 'Up'} | Select-Object MacAddress
 
         Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
@@ -104,7 +104,7 @@ function Restart-LabComputer {
     #>    
     [CmdletBinding()]
     param()
-    Restart-Computer -ComputerName $remotecomputers -Force
+    Restart-Computer -ComputerName $labComputerList -Force
 }
 
 function Stop-LabComputer {
@@ -119,19 +119,19 @@ function Stop-LabComputer {
     #>    
     [CmdletBinding()]
     param()
-    Stop-Computer -ComputerName $remotecomputers -Force
+    Stop-Computer -ComputerName $labComputerList -Force
 }
 
 function Disconnect-AnyUser {
     <#
     .SYNOPSIS
-        Disconnect any connected user from each remote computer
+        Disconnect any connected user from each Lab computer
 
     .EXAMPLE
         Disconnect-AnyUser -ComputerName PC01
     
     .NOTES
-        Windows 10 Home doesn't include query.exe (https://superuser.com/a/1646775)
+        Windows Home doesn't include query.exe (https://superuser.com/a/1646775)
 
         Quser.exe emit a non-terminating error in case of no user logged-in,
         to catch the error force PS to raise an exception, set $ErrorActionPreference = 'Stop'
@@ -139,13 +139,13 @@ function Disconnect-AnyUser {
     #>        
     [CmdletBinding()]
     param(
-        [Parameter(HelpMessage="Enter remote PC name")]
+        [Parameter(HelpMessage="Enter Lab computer name")]
         [string]$ComputerName  = 'All'
     )
 
-    if ($ComputerName -ne 'All') {$remotecomputers = $ComputerName}
+    if ($ComputerName -ne 'All') {$labComputerList = $ComputerName}
 
-    Invoke-Command -ComputerName $remotecomputers -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope 
         try {
             # get array of logged-in users, skip 1st row (the head)
@@ -186,7 +186,7 @@ function New-LabUser {
       [string]$UserName
     )
     
-    Invoke-Command -ComputerName $remotecomputers -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
         try {
             $blankPassword = [securestring]::new()
             New-LocalUser -Name $Using:UserName -Password $blankPassword -PasswordNeverExpires `
@@ -217,7 +217,7 @@ function Remove-LabUser {
       [string]$UserName
     )
     
-    Invoke-Command -ComputerName $remotecomputers -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
         try {
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
             # Remove the sign-in entry in Windows
@@ -263,7 +263,7 @@ function Set-LabUser {
         # Prompt and read new password
         $password = Read-Host -Prompt 'Enter the new password' -AsSecureString
     }
-    Invoke-Command -ComputerName $remotecomputers  -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerList  -ScriptBlock {
         try {
             if ($Using:SetPassword.IsPresent) {
                 # change password
@@ -326,7 +326,7 @@ function Sync-LabComputerDate {
 
         Set-Date -Date $currentDate | Out-Null
         Write-Host "MasterComputer synchronized" -ForegroundColor Green
-        Invoke-Command -ComputerName $remotecomputers -ScriptBlock {
+        Invoke-Command -ComputerName $labComputerList -ScriptBlock {
             Set-Date -Date $Using:currentDate | Out-Null
             Write-Host "$env:computername synchronized" -ForegroundColor Green
         }        
@@ -363,7 +363,7 @@ function Copy-ToLabUserDesktop {
 
     Write-Host "Start copying to LabUser Desktops ..." -ForegroundColor Yellow
 
-    foreach ($computerName in $remotecomputers) {
+    foreach ($computerName in $labComputerList) {
         $session = New-PSSession -ComputerName $computerName
 
             $userprofile = Invoke-Command -Session $session -ScriptBlock {
@@ -401,10 +401,10 @@ function Copy-ToLabUserDesktop {
 function Test-LabComputerPrompt {
     <#
     .SYNOPSIS
-        Test if each remote computer prompt
+        Test for each Lab computer prompt
 
     .DESCRIPTION
-        This cmdlet informs you which remote computers are on and ready to accept cmdlets from admin computer.
+        This cmdlet informs you which Lab computers are on and ready to accept cmdlets from admin computer.
 
     .EXAMPLE
         Test-LabComputerPrompt
@@ -412,7 +412,7 @@ function Test-LabComputerPrompt {
     [CmdletBinding()]
     param ()
 
-    foreach ($pc in $remotecomputers) {
+    foreach ($pc in $labComputerList) {
         try {
             if (Test-Connection -TargetName $pc -Count 3 -Quiet) { 
                 Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
