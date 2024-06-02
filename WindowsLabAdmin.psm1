@@ -354,7 +354,6 @@ function Copy-ToLabUserDesktop {
         Copy a file or folder from one location to LabUser Desktop, folders are copied recursively.
         This cmdlet can copy over a read-only file or alias.
     
-
     .EXAMPLE
         Copy-ToLabUserDesktop -Path filename.txt -UserName Alunno
 
@@ -406,5 +405,37 @@ function Copy-ToLabUserDesktop {
 
         Remove-PSSession -Session $session
     }
-    
+}
+
+function Test-EveryComputerPrompt {
+    <#
+    .SYNOPSIS
+        Test if each remote computer prompt
+
+    .DESCRIPTION
+        This cmdlet informs you which remote computers are on and ready to accept cmdlets from admin computer.
+
+    .EXAMPLE
+        Test-EveryComputerPrompt
+    #>
+    [CmdletBinding()]
+    param ()
+
+    foreach ($pc in $remotecomputers) {
+        try {
+            if (Test-Connection -TargetName $pc -Count 3 -Quiet) { 
+                Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
+                Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
+                Write-Host "is ready" -ForegroundColor Green
+            } else {
+                Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
+                Write-Host "is offline" -ForegroundColor Red
+            }
+        }
+        catch [System.InvalidOperationException] {
+            Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
+            Write-Host "is getting ready" -ForegroundColor Red
+            # $_.exception.GetType().fullname
+        }
+    }
 }
