@@ -67,13 +67,13 @@ function Show-Config {
 }
 
 
-function Start-EveryComputer {
+function Start-LabComputer {
     <#
     .SYNOPSIS
-        Turn on every computers if WoL setting is present and enabled in BIOS/UEFI
+        Turn on each computers if WoL setting is present and enabled in BIOS/UEFI
 
     .EXAMPLE
-        Start-EveryComputer
+        Start-LabComputer
 
     .NOTES
         https://www.pdq.com/blog/wake-on-lan-wol-magic-packet-powershell/
@@ -92,13 +92,13 @@ function Start-EveryComputer {
     
 }
 
-function Restart-EveryComputer {
+function Restart-LabComputer {
     <#
     .SYNOPSIS
-        Force an immediate restart of every computer and wait for them to be on again
+        Force an immediate restart of each computer and wait for them to be on again
 
     .EXAMPLE
-        Restart-EveryComputer
+        Restart-LabComputer
 
     .NOTES
     #>    
@@ -107,13 +107,13 @@ function Restart-EveryComputer {
     Restart-Computer -ComputerName $remotecomputers -Wait -Force
 }
 
-function Stop-EveryComputer {
+function Stop-LabComputer {
     <#
     .SYNOPSIS
-        Force an immediate shut down of every computer
+        Force an immediate shut down of each computer
 
     .EXAMPLE
-        Stop-EveryComputer
+        Stop-LabComputer
 
     .NOTES
     #>    
@@ -306,13 +306,13 @@ function Set-LabUser {
     }   
 }
 
-function Sync-EveryComputerDate {
+function Sync-LabComputerDate {
     <#
     .SYNOPSIS
-        Sync date with NTP time for every computer
+        Sync the date with the NTP time for each computer.
     
         .EXAMPLE
-        Sync-EveryComputerDate
+        Sync-LabComputerDate
 
     .NOTES
         The NtpTime module is required on MasterComputer (https://www.powershellgallery.com/packages/NtpTime/1.1)
@@ -407,7 +407,7 @@ function Copy-ToLabUserDesktop {
     }
 }
 
-function Test-EveryComputerPrompt {
+function Test-LabComputerPrompt {
     <#
     .SYNOPSIS
         Test if each remote computer prompt
@@ -416,7 +416,7 @@ function Test-EveryComputerPrompt {
         This cmdlet informs you which remote computers are on and ready to accept cmdlets from admin computer.
 
     .EXAMPLE
-        Test-EveryComputerPrompt
+        Test-LabComputerPrompt
     #>
     [CmdletBinding()]
     param ()

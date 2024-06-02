@@ -19,13 +19,13 @@ It's ***PS remoting*** that permits you to run commands on a remote machine as i
 a computer lab where the administrator operates. Computers are equipped with Windows OS (10 or 11) and are connected to the same LAN.
 
 **Admin computer**  
-the computer that the administrator uses to run commands on remote computers.
+the computer that the administrator uses to run commands on lab computers.
 
-**Remote computers**  
-the computers available in the lab, remote-controlled from the Admin computer. They have similar hardware and software characteristics.
+**Lab computer**  
+a computer available in the lab, remote-controlled from the Admin computer. Lab computers have similar hardware and software characteristics.
 
 **Lab User Account**  
-a local user account created on each remote computer with the same: `username`, `password`, and account type (Standard User or Administrator).  
+a local user account created on each lab computer with the same: `username`, `password`, and account type (Standard User or Administrator).  
 These accounts never expire, the password never expires and can't be changed by the lab user.
   
 ## Getting the Lab ready
@@ -48,7 +48,7 @@ Log in to the every ***PSAdmin*** account and follow these steps
 ## Installation
 1. Name a folder `WindowsLabAdmin` on the *Admin Computer* and download the files: `config.json.example`, `WindowsLabAdmin.psm1`, `install-module.ps1`
 2. Rename `config.json.example` in `config.json`
-3. Update `config.json` with remote computer names in your lab, disregarding Mac Addresses at this step.
+3. Update `config.json` with lab computer names in your lab, disregarding Mac Addresses at this step.
 4. Open the PS terminal in the `WindowsLabAdmin` folder and run the script `.\install-module.ps1`
 
 You can also clone the repository and follow steps 2 to 4.
@@ -57,13 +57,14 @@ Close and reopen the terminal. Then, launch `get-command -Module WindowsLabAdmin
 
 ## Available cmdlets
 
-`Copy-ToCommonUserDesktop`  
+`Copy-ToLabUserDesktop`  
 `Disconnect-AnyUser`  
-`New-CommonUser`  
-`Remove-CommonUser`  
-`Restart-EveryComputer`  
-`Set-CommonUser`  
+`New-LabUser`  
+`Remove-LabUser`  
+`Restart-LabComputer`  
+`Set-LabUser`  
 `Show-Config`  
-`Start-EveryComputer`  
-`Stop-EveryComputer`  
-`Sync-EveryComputerDate`  
+`Start-LabComputer`  
+`Stop-LabComputer`  
+`Sync-LabComputerDate`
+`Test-LabComputerPrompt`
