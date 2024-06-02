@@ -163,13 +163,13 @@ function Disconnect-AnyUser {
     }
 }
 
-function New-CommonUser {
+function New-LabUser {
     <#
     .SYNOPSIS
-        Create a Standard CommonUser with a blank never-expiring password
+        Create a Standard LabUser with a blank never-expiring password
 
     .EXAMPLE
-        New-CommonUser -UserName "Alunno"
+        New-LabUser -UserName "Alunno"
 
     .NOTES
         Avoid Confusion: Microsoft says that -NoPassword Switch parameter 'Indicates that the 
@@ -182,7 +182,7 @@ function New-CommonUser {
     #>    
     [CmdletBinding()]
     param (
-      [Parameter(Mandatory=$True, HelpMessage="Enter username for Common User")]
+      [Parameter(Mandatory=$True, HelpMessage="Enter username for Lab User")]
       [string]$UserName
     )
     
@@ -200,20 +200,20 @@ function New-CommonUser {
     }
 }
 
-function Remove-CommonUser {
+function Remove-LabUser {
     <#
     .SYNOPSIS
-        Remove specified CommonUser, also remove registry entry and user profile folder if they exist
+        Remove specified LabUser, also remove registry entry and user profile folder if they exist
 
     .EXAMPLE
-        Remove-CommonUser -Username "Alunno"
+        Remove-LabUser -Username "Alunno"
     
     .NOTES
         Inspiration: https://adamtheautomator.com/powershell-delete-user-profile/
     #>    
     [CmdletBinding()]
     param (
-      [Parameter(Mandatory=$True, HelpMessage="Enter username for Common User")]
+      [Parameter(Mandatory=$True, HelpMessage="Enter username for Lab User")]
       [string]$UserName
     )
     
@@ -234,24 +234,24 @@ function Remove-CommonUser {
     }
 }
 
-function Set-CommonUser {
+function Set-LabUser {
     <#
     .SYNOPSIS
-        Set password and account type for the CommonUser specified
+        Set password and account type for the LabUser specified
 
     .EXAMPLE
-        Set-CommonUser -UserName "Alunno"
-        Set-CommonUser -UserName "Alunno" -SetPassword
-        Set-CommonUser -UserName "Alunno" -SetPassword -AccountType Administrator
+        Set-LabUser -UserName "Alunno"
+        Set-LabUser -UserName "Alunno" -SetPassword
+        Set-LabUser -UserName "Alunno" -SetPassword -AccountType Administrator
     
     .NOTES
-        CommonUser Administrators can't change the password like standard users
+        LabUser Administrators can't change the password like standard users
         
         Windows Groups description: https://ss64.com/nt/syntax-security_groups.html
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory=$True, HelpMessage="Enter the username for Common User")]
+        [Parameter(Mandatory=$True, HelpMessage="Enter the username for Lab User")]
         [string]$UserName,
         [switch]$SetPassword,
         [validateSet('StandardUser', 'Administrator')]
@@ -345,20 +345,20 @@ function Sync-EveryComputerDate {
     }
 }
 
-function Copy-ToCommonUserDesktop {
+function Copy-ToLabUserDesktop {
     <#
     .SYNOPSIS
-        Copy a file or folder from one location to CommonUser Desktop
+        Copy a file or folder from one location to LabUser Desktop
 
     .DESCRIPTION
-        Copy a file or folder from one location to CommonUser Desktop, folders are copied recursively.
+        Copy a file or folder from one location to LabUser Desktop, folders are copied recursively.
         This cmdlet can copy over a read-only file or alias.
     
 
     .EXAMPLE
-        Copy-ToCommonUserDesktop -Path filename.txt -UserName Alunno
+        Copy-ToLabUserDesktop -Path filename.txt -UserName Alunno
 
-        Copy-ToCommonUserDesktop -Path C:\Logfiles -UserName Concorso
+        Copy-ToLabUserDesktop -Path C:\Logfiles -UserName Concorso
     
     .NOTES
         Inspiration: https://lazyadmin.nl/powershell/copy-file/#copy-file-to-remote-computer-with-powershell
@@ -367,11 +367,11 @@ function Copy-ToCommonUserDesktop {
     param (
         [Parameter(Mandatory=$True, HelpMessage="Enter Path to file or folder")]
         [string]$Path,
-        [Parameter(Mandatory=$True, HelpMessage="Enter CommonUser name")]
+        [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName        
     )
 
-    Write-Host "Start copying to CommonUser Desktops ..." -ForegroundColor Yellow
+    Write-Host "Start copying to LabUser Desktops ..." -ForegroundColor Yellow
 
     foreach ($computerName in $remotecomputers) {
         $session = New-PSSession -ComputerName $computerName
