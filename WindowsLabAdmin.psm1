@@ -104,7 +104,7 @@ function Restart-LabComputer {
     #>    
     [CmdletBinding()]
     param()
-    Restart-Computer -ComputerName $remotecomputers -Wait -Force
+    Restart-Computer -ComputerName $remotecomputers -Force
 }
 
 function Stop-LabComputer {
@@ -292,16 +292,7 @@ function Set-LabUser {
             Write-Host "$Using:UserName on $env:computername is already a Standard User" -ForegroundColor Yellow
         }
         catch {
-                    $formatstring = "{0} : {1}`n{2}`n" +
-                    "    + CategoryInfo          : {3}`n" +
-                    "    + FullyQualifiedErrorId : {4}`n"
-        $fields = $_.InvocationInfo.MyCommand.Name,
-            $_.ErrorDetails.Message,
-            $_.InvocationInfo.PositionMessage,
-            $_.CategoryInfo.ToString(),
-            $_.FullyQualifiedErrorId   
-
-            Write-Host -Foreground Red -Background Black ($formatstring -f $fields)
+            $_.exception.GetType().fullname
         }
     }   
 }
@@ -435,7 +426,6 @@ function Test-LabComputerPrompt {
         catch [System.InvalidOperationException] {
             Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
             Write-Host "is getting ready" -ForegroundColor Red
-            # $_.exception.GetType().fullname
         }
     }
 }
