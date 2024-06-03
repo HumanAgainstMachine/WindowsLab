@@ -401,10 +401,10 @@ function Copy-ToLabUserDesktop {
 function Test-LabComputerPrompt {
     <#
     .SYNOPSIS
-        Test for each Lab computer prompt
+        Tests for each Lab computer if the WinRM service is running.
 
     .DESCRIPTION
-        This cmdlet informs you which Lab computers are on and ready to accept cmdlets from admin computer.
+        This cmdlet informs you which Lab computers are ready to accept cmdlets from Main computer.
 
     .EXAMPLE
         Test-LabComputerPrompt
@@ -412,20 +412,15 @@ function Test-LabComputerPrompt {
     [CmdletBinding()]
     param ()
 
-    foreach ($pc in $labComputerList) {
+    foreach ($pc in $labComputerList) {       
         try {
-            if (Test-Connection -TargetName $pc -Count 3 -Quiet) { 
-                Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
-                Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
-                Write-Host "is ready" -ForegroundColor Green
-            } else {
-                Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
-                Write-Host "is offline" -ForegroundColor Red
-            }
+            Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
+            Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
+            Write-Host "ready" -ForegroundColor Green 
         }
         catch [System.InvalidOperationException] {
             Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
-            Write-Host "is getting ready" -ForegroundColor Red
+            Write-Host "not ready" -ForegroundColor Red
         }
     }
 }
