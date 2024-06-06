@@ -166,17 +166,18 @@ function Disconnect-AnyUser {
 function New-LabUser {
     <#
     .SYNOPSIS
-        Create a Standard LabUser with a blank never-expiring password
+        Create a Standard Lab user with a blank never-expiring password
 
     .EXAMPLE
         New-LabUser -UserName "Alunno"
 
     .NOTES
-        Avoid Confusion: Microsoft says that -NoPassword Switch parameter 'Indicates that the 
-        user account doesn't have a password' and as I tested that the user must provide one when
-        signing-in the first time. 
-        This behavior plus -UserMayNotChangePassword switch parameter cause a deadlock.
-        -NoPassword is different from a blank password
+        I just want to clarify the usage of the New-LocalUser cmdlet's switch parameters 
+        -NoPassword and -UserMayNotChangePassword. According to Microsoft, the -NoPassword 
+        parameter indicates that the user account doesn't have a password. However, in my 
+        tests, the user was prompted to provide a password when signing in for the first time. 
+        This indicates that -NoPassword is different from a blank password. Consequently, using 
+        -NoPassword along with -UserMayNotChangePassword results in a deadlock.
         
         Windows Groups' description: https://ss64.com/nt/syntax-security_groups.html
     #>    
@@ -190,8 +191,10 @@ function New-LabUser {
         try {
             $blankPassword = [securestring]::new()
             New-LocalUser -Name $Using:UserName -Password $blankPassword -PasswordNeverExpires `
-            -UserMayNotChangePassword -AccountNeverExpires -ErrorAction Stop
+            -UserMayNotChangePassword -AccountNeverExpires -ErrorAction Stop | Out-Null
+
             Add-LocalGroupMember -Group "Users" -Member $Using:UserName
+
             Write-Host "$Using:UserName created on $env:computername" -ForegroundColor Green
         }
         catch [Microsoft.PowerShell.Commands.UserExistsException] {
