@@ -425,21 +425,21 @@ function Test-LabComputerPrompt {
     }
 }
 
-function Backup-LabComputerDesktop {
+function Save-LabComputerDesktop {
     <#
     .SYNOPSIS
-        Backup desktop folder for the specified Lab user
+        Save a copy of Lab user desktop folder into the Lab computer root
 
     .DESCRIPTION
-        Save a copy of desktop folder for the specified user to Lab computer $env:SYSTEMDRIVE/LabComputerBackup
+        This cmdlet copies the Lab user desktop folder into into ROOT/LabComputer folder and deletes any previous item.
 
     .EXAMPLE
-        Backup-LabComputerDesktop -UserName Alunno
+        Save-LabComputerDesktop -UserName Alunno
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
-        [string]$UserName        
+        [string]$UserName
     )
     invoke-Command -ComputerName $labComputerList -ScriptBlock {
         try {
@@ -448,26 +448,30 @@ function Backup-LabComputerDesktop {
 
             # get Lab user USERPROFILE path
             $userProfilePath = (Get-CimInstance -Class Win32_UserProfile | Where-Object { $_.SID -eq $localUser.SID.Value }).LocalPath
-            Test-Path $userProfilePath -ErrorAction Stop | Out-Null
+            Test-Path -Path $userProfilePath -ErrorAction Stop | Out-Null
 
-            $desktopPath = Join-Path -Path $userprofilePath -ChildPath 'Desktop'
-            $labComputerDesktopBackupPath = Join-Path -Path $env:SystemDrive -ChildPath 'LabComputerDesktopBackup'
-            # create backup folder if not exist
-            if (-Not (Test-Path -Path $labComputerDesktopBackupPath -PathType Container)) {
-                New-Item -Path $labComputerDesktopBackupPath -ItemType "directory"
-            }            
+            $userDesktopPath = Join-Path -Path $userprofilePath -ChildPath 'Desktop'
 
-            $backupPath = Join-Path -Path $labComputerDesktopBackupPath -ChildPath $Using:UserName
-            Copy-Item -Path "$desktopPath\*" -Destination $backupPath -Recurse -Force
-            Write-Host "$Using:Username on $env:computername backup done" -ForegroundColor Green
+            # create LabComputer folder if not exist
+            $labComputerPath = Join-Path -Path $env:SystemDrive -ChildPath 'LabComputer'
+            New-Item -Path $labComputerPath -ItemType "directory" -ErrorAction SilentlyContinue
+            
+            # copy lab user desktop
+            $destinationPath = Join-Path -Path $labComputerPath -ChildPath "$Using:UserName-Desktop"
+            Remove-Item -Path $destinationPath -Force -Recurse -ErrorAction SilentlyContinue # delete previous saved desktop if any
+            Write-Host $userDesktopPath
+            Copy-Item -Path "$userDesktopPath\" -Destination $destinationPath -Recurse -Force
+
+            Write-Host "$Using:Username Desktop saved for $env:computername" -ForegroundColor Green
         }
         catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-            Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
-            Write-Host "Copy to $env:computername failed" -ForegroundColor Red
+            Write-Host "$Using:UserName @ $env:computername does NOT exist" -ForegroundColor Yellow
+            Write-Host "$Using:Username Desktop save failed for $env:computername" -ForegroundColor Red
         }        
-        catch [System.ArgumentNullException] { # user exist USERPROFILE path no
+        catch [System.Management.Automation.ParameterBindingException] {
+            # user exist USERPROFILE path no
             Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
-            Write-Host "Copy to $env:computername failed" -ForegroundColor Red        
+            Write-Host "$Using:Username Desktop save failed for $env:computername" -ForegroundColor Red
         }
     }
 }
