@@ -128,7 +128,7 @@ function Disconnect-AnyUser {
         Disconnect any connected user from each Lab computer
 
     .EXAMPLE
-        Disconnect-AnyUser -ComputerName PC01
+        Disconnect-AnyUser
     
     .NOTES
         Windows Home doesn't include query.exe (https://superuser.com/a/1646775)
@@ -138,16 +138,14 @@ function Disconnect-AnyUser {
         because quser, being not a cmdlet, has not -ErrorAction parameter.
     #>        
     [CmdletBinding()]
-    param(
-        [Parameter(HelpMessage="Enter Lab computer name")]
-        [string]$ComputerName  = 'All'
-    )
-
-    if ($ComputerName -ne 'All') {$labComputerList = $ComputerName}
+    param()
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope 
         try {
+            # check if quser command exist
+            Get-Command -Name quser -ErrorAction Stop | Out-Null
+
             # get array of logged-in users, skip 1st row (the head)
             quser | Select-Object -Skip 1 |
             ForEach-Object {
@@ -156,8 +154,11 @@ function Disconnect-AnyUser {
                 Write-Host "User" ($_ -split "\s+")[1] "logged out $($env:COMPUTERNAME)"  -ForegroundColor Green
             }
         }
+        catch [System.Management.Automation.CommandNotFoundException] {
+            Write-Host "Cannot disconnect any user: quser command not found on $env:computername" -ForegroundColor Red
+            Write-Host "is it a windows Home?"
+        }        
         catch {
-            <#Do this if a terminating exception happens#>
             Write-host "No user logged in $($env:COMPUTERNAME)" -ForegroundColor Yellow
         }
     }
