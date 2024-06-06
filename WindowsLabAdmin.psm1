@@ -459,7 +459,6 @@ function Save-LabComputerDesktop {
             # copy lab user desktop
             $destinationPath = Join-Path -Path $labComputerPath -ChildPath "$Using:UserName-Desktop"
             Remove-Item -Path $destinationPath -Force -Recurse -ErrorAction SilentlyContinue # delete previous saved desktop if any
-            Write-Host $userDesktopPath
             Copy-Item -Path "$userDesktopPath\" -Destination $destinationPath -Recurse -Force
 
             Write-Host "$Using:Username Desktop saved for $env:computername" -ForegroundColor Green
@@ -472,6 +471,50 @@ function Save-LabComputerDesktop {
             # user exist USERPROFILE path no
             Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
             Write-Host "$Using:Username Desktop save failed for $env:computername" -ForegroundColor Red
+        }
+    }
+}
+
+function Restore-LabCOmputerDesktop {
+    <#
+    .SYNOPSIS
+        Restore the copy of Lab user desktop folder from the Lab computer root
+
+    .DESCRIPTION
+        This cmdlet copies back the Lab user desktop folder from into ROOT/LabComputer folder, overwrite any existing items.
+
+    .EXAMPLE
+        Restore-LabComputerDesktop -UserName Alunno
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
+        [string]$UserName
+    )
+    invoke-Command -ComputerName $labComputerList -ScriptBlock {
+        try {
+            # get specified Lab user
+            $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
+
+            # get Lab user USERPROFILE path
+            $userProfilePath = (Get-CimInstance -Class Win32_UserProfile | Where-Object { $_.SID -eq $localUser.SID.Value }).LocalPath
+            Test-Path -Path $userProfilePath -ErrorAction Stop | Out-Null
+
+            $userDesktopPath = Join-Path -Path $userprofilePath -ChildPath 'Desktop'
+
+            # copy lab user desktop back
+            $sourcePath = Join-Path -Path $env:SystemDrive -ChildPath "LabComputer" | Join-Path -ChildPath "$using:UserName-Desktop"
+            Copy-Item -Path "$sourcePath\*" -Destination $userDesktopPath -Recurse -Force
+
+            Write-Host "$Using:Username Desktop restored for $env:computername" -ForegroundColor Green
+        }
+        catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
+            Write-Host "$Using:UserName @ $env:computername does NOT exist" -ForegroundColor Yellow
+            Write-Host "$Using:Username Desktop restore failed for $env:computername" -ForegroundColor Red
+        }        
+        catch [System.Management.Automation.ParameterBindingException] {
+            Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
+            Write-Host "$Using:Username Desktop restore failed for $env:computername" -ForegroundColor Red
         }
     }
 }
