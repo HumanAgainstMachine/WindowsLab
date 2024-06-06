@@ -206,7 +206,10 @@ function New-LabUser {
 function Remove-LabUser {
     <#
     .SYNOPSIS
-        Remove specified LabUser, also remove registry entry and user profile folder if they exist
+        Remove specified Lab User, also remove registry entry and user profile folder if they exist
+
+    .DESCRIPTION
+        This cmdlet log out the lab user if he is logged in and completely remove it
 
     .EXAMPLE
         Remove-LabUser -Username "Alunno"
@@ -219,12 +222,33 @@ function Remove-LabUser {
       [Parameter(Mandatory=$True, HelpMessage="Enter username for Lab User")]
       [string]$UserName
     )
-    
+
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
         try {
+            # check if quser command exist
+            Get-Command -Name quser -ErrorAction Stop | Out-Null
+
+            # log out if logged in otherwise silently continue
+            $ErrorActionPreference = 'SilentlyContinue'
+            quser $Using:UserName | Select-Object -Skip 1 |
+            ForEach-Object {
+                # logoff by session ID
+                logoff ($_ -split "\s+")[2]
+                Write-Host "User" ($_ -split "\s+")[1] "logged out $($env:COMPUTERNAME)"  -ForegroundColor Green                
+            }
+            $ErrorActionPreference = 'Continue'
+        }
+        catch [System.Management.Automation.CommandNotFoundException] {
+            Write-Host "quser command not found on $env:computername" -ForegroundColor Red
+            Write-Host "is it a windows Home? I'll try to remove $using:UserName anyway ...`n"
+        }
+
+        try {
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
+
             # Remove the sign-in entry in Windows
             Remove-LocalUser -SID $localUser.SID.Value
+
             # Remove %USERPROFILE% folder and registry entry if exist
             Get-CimInstance -Class Win32_UserProfile | Where-Object { $_.SID -eq $localUser.SID.Value } | Remove-CimInstance
     
