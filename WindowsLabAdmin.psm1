@@ -78,7 +78,7 @@ function Start-LabComputer {
     .NOTES
         https://www.pdq.com/blog/wake-on-lan-wol-magic-packet-powershell/
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param ()
     # send Magic Packet over LAN
     foreach ($Mac in $macs) {
@@ -102,7 +102,7 @@ function Restart-LabComputer {
 
     .NOTES
     #>    
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param()
     Restart-Computer -ComputerName $labComputerList -Force
 }
@@ -117,7 +117,7 @@ function Stop-LabComputer {
 
     .NOTES
     #>    
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param()
     Stop-Computer -ComputerName $labComputerList -Force
 }
@@ -151,7 +151,7 @@ function Disconnect-AnyUser {
             ForEach-Object {
                 # logoff by session ID
                 logoff ($_ -split "\s+")[2]
-                Write-Host "User" ($_ -split "\s+")[1] "logged out $($env:COMPUTERNAME)"  -ForegroundColor Green
+                Write-Host "User", ($_ -split "\s+")[1], "logged out $($env:COMPUTERNAME)"  -ForegroundColor Green
             }
         }
         catch [System.Management.Automation.CommandNotFoundException] {
@@ -182,7 +182,7 @@ function New-LabUser {
         
         Windows Groups' description: https://ss64.com/nt/syntax-security_groups.html
     #>    
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
       [Parameter(Mandatory=$True, HelpMessage="Enter username for Lab User")]
       [string]$UserName
@@ -218,7 +218,7 @@ function Remove-LabUser {
     .NOTES
         Inspiration: https://adamtheautomator.com/powershell-delete-user-profile/
     #>    
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
       [Parameter(Mandatory=$True, HelpMessage="Enter username for Lab User")]
       [string]$UserName
@@ -235,7 +235,7 @@ function Remove-LabUser {
             ForEach-Object {
                 # logoff by session ID
                 logoff ($_ -split "\s+")[2]
-                Write-Host "User" ($_ -split "\s+")[1] "logged out $($env:COMPUTERNAME)"  -ForegroundColor Green                
+                Write-Host "User", ($_ -split "\s+")[1], "logged out $($env:COMPUTERNAME)"  -ForegroundColor Green                
             }
             $ErrorActionPreference = 'Continue'
         }
@@ -277,7 +277,7 @@ function Set-LabUser {
         
         Windows Groups description: https://ss64.com/nt/syntax-security_groups.html
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory=$True, HelpMessage="Enter the username for Lab User")]
         [string]$UserName,
