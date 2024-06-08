@@ -4,7 +4,7 @@ This module is a collection of cmdlets to administer a ***computer lab*** based 
 
 A ***lab administrator*** usually has to perform the same operations on each computer like creating a new local account, setting a new password, restarting all computers, etc.
 
-***Windows Lab Admin*** module enables the administrator to perform those operations only once from his computer for every computer inside the lab.
+***WinLabAdmin*** module enables the administrator to perform those operations only once from his computer for every computer inside the lab.
 
 I use this module to administer the ***school computer labs*** where I work as an IT assistant. 
 
@@ -15,7 +15,7 @@ It's ***PS remoting*** that permits you to run commands on a remote machine as i
 
 ## Terminology
 
-**Windows Lab**  
+**Win Lab**  
 a computer lab where the administrator operates. Computers are equipped with Windows OS (10 or 11) and are connected to the same LAN.
 
 **Main computer**  
@@ -44,16 +44,14 @@ Log in to each ***PSAdmin*** account created and follow these steps
 
 ## Installation
 You need to install the module only on the ***Main computer***.
-
+ 
 1. Log in to ***PSAdmin*** account
-2. Name a folder `WindowsLabAdmin` on the *Main computer* and download the files: `config.json.example`, `WindowsLabAdmin.psm1`, `install-module.ps1`
+2. Clone the repository
 3. Rename `config.json.example` in `config.json`
 4. Update `config.json` with lab computer names in your lab, disregarding Mac Addresses at this step.
-5. Open the PS terminal in the `WindowsLabAdmin` folder and run the script `.\install-module.ps1`
+5. Open the PS terminal in the `WindLabAdmin` folder and launch `Import-Module -Name .\WinLabAdmin`
 
-You can also clone the repository and follow steps 2 to 4.
-
-Close and reopen the terminal. Then, launch `get-command -Module WindowsLabAdmin`. If the module has been installed correctly, you should see the list of cmdlets.
+Close and reopen the terminal. Then, launch `get-command -Module WinLabAdmin`. If the module has been installed correctly, you should see the list of cmdlets.
 
 ## Available cmdlets
 
@@ -67,4 +65,6 @@ Close and reopen the terminal. Then, launch `get-command -Module WindowsLabAdmin
 `Start-LabComputer`  
 `Stop-LabComputer`  
 `Sync-LabComputerDate`  
-`Test-LabComputerPrompt`
+`Test-LabComputerPrompt`  
+`Restore-LabComputerDesktop`  
+`Save-LabComputerDesktop`
