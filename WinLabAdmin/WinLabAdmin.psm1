@@ -503,7 +503,7 @@ function Save-LabComputerDesktop {
     }
 }
 
-function Restore-LabCOmputerDesktop {
+function Restore-LabComputerDesktop {
     <#
     .SYNOPSIS
         Restore the copy of Lab user desktop folder from the Lab computer root
