@@ -10,12 +10,16 @@
 # get path to config.json
 $configPath = Join-Path -Path $PSScriptRoot -ChildPath 'config.json'
 
-# read config file
-$config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
+if (Test-Path -Path $configPath -PathType Leaf) {
+    # read config file
+    $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
 
-$labComputerList = $config.labComputerList
-$macs = $config.macs
-
+    $labComputerList = $config.labComputerList
+    $macs = $config.macs
+} else {
+    Write-Host "config.json missing in $PSScriptRoot" -ForegroundColor Red
+    Write-Host "Go to $PSScriptRoot and use config.json.example to create your config.json"
+}
 
 function Show-Config {
     <#
