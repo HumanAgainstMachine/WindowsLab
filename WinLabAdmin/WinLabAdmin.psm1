@@ -131,7 +131,7 @@ function Disconnect-AnyUser {
         Disconnect-AnyUser
     
     .NOTES
-        Windows Home doesn't include query.exe (https://superuser.com/a/1646775)
+        Windows Home edition doesn't include query.exe (https://superuser.com/a/1646775)
 
         Quser.exe emit a non-terminating error in case of no user logged-in,
         to catch the error force PS to raise an exception, set $ErrorActionPreference = 'Stop'
@@ -156,7 +156,7 @@ function Disconnect-AnyUser {
         }
         catch [System.Management.Automation.CommandNotFoundException] {
             Write-Host "Cannot disconnect any user: quser command not found on $env:computername" -ForegroundColor Red
-            Write-Host "is it a windows Home?"
+            Write-Host "is it a windows Home edition?"
         }        
         catch {
             Write-host "No user logged in $($env:COMPUTERNAME)" -ForegroundColor Yellow
@@ -241,7 +241,7 @@ function Remove-LabUser {
         }
         catch [System.Management.Automation.CommandNotFoundException] {
             Write-Host "quser command not found on $env:computername" -ForegroundColor Red
-            Write-Host "is it a windows Home? I'll try to remove $using:UserName anyway ...`n"
+            Write-Host "is it a windows Home edition? I'll try to remove $using:UserName anyway ...`n"
         }
 
         try {
