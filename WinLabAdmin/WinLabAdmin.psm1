@@ -17,8 +17,17 @@ if (Test-Path -Path $configPath -PathType Leaf) {
     $labComputerList = $config.labComputerList
     $macs = $config.macs
 } else {
-    Write-Host "config.json missing in $PSScriptRoot" -ForegroundColor Red
-    Write-Host "Go to $PSScriptRoot and use config.json.example to create your config.json"
+    $t = "
+===========================================
+---         WinLabAdmin Module          ---
+===========================================
+"    
+    Write-Host $t.Trim() -ForegroundColor DarkYellow
+    Write-Host "config.json not found at the following path:" -ForegroundColor Red
+    Write-Host $PSScriptRoot -ForegroundColor DarkYellow
+    Write-Host "1. rename config.json.example to config.json"
+    Write-Host "2. update config.json with lab computer names in your lab. Ignore Mac Addresses at this step"
+    Exit 2 # file not found
 }
 
 function Show-Config {
