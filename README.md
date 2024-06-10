@@ -19,7 +19,7 @@ It's ***PS remoting*** that permits you to run commands on a remote machine as i
 a computer lab where the administrator operates. Computers are equipped with Windows OS (10 or 11) and are connected to the same LAN.
 
 **Main computer**  
-the computer that the administrator uses to run remote cmdlets on lab computers.
+the computer that the administrator uses to run this module cmdlets.
 
 **Lab computer**  
 a computer available in the lab, remote-controlled from the Main computer. Lab computers have similar hardware and software characteristics.
@@ -31,7 +31,7 @@ These accounts never expire, the password never expires and can't be changed by 
 ## Getting the Lab ready
 At this time, you need to move from computer to computer in the lab to operate.
 
-Create the *Administrator* ***Lab User Account***. Good usernames are ***LabAdmin*** or ***PSAdmin***, let's use ***PSAdmin***. You also need to create the same account on the ***Main computer***.
+Create the *Administrator* ***Lab User Account*** on each computer. Good usernames are ***LabAdmin*** or ***PSAdmin***, let's use ***PSAdmin***. You also need to create this account on the ***Main computer***.
 
 Log in to each ***PSAdmin*** account created and follow these steps
 
@@ -43,17 +43,18 @@ Log in to each ***PSAdmin*** account created and follow these steps
     ***Disclaimer***: you are responsible for handling security issues. For instance, the *Main computer* should only be accessible to you, and the *PSAdmin* password should be known exclusively by you.
 
 ## Installation
+Install [WinLabAdmin](https://www.powershellgallery.com/packages/WinLabAdmin/0.0.1) from PowerShell Gallery.
+
 You need to install the module only on the ***Main computer***.
  
 1. Log in to ***PSAdmin*** account
-2. Clone the repository
-3. Rename `config.json.example` in `config.json`
-4. Update `config.json` with lab computer names in your lab, disregarding Mac Addresses at this step.
-5. Open the PS terminal in the `WindLabAdmin` folder and launch `Import-Module -Name .\WinLabAdmin`
+2. `PS> Install-Module -Name WinLabAdmin`
+3. Close and reopen the terminal and aunch `get-command -Module WinLabAdmin`
+4. Follow instructions to set `config.json`
 
-Close and reopen the terminal. Then, launch `get-command -Module WinLabAdmin`. If the module has been installed correctly, you should see the list of cmdlets.
+Close and reopen the terminal again. Then, launch `get-command -Module WinLabAdmin`. If the module has been installed correctly, you should see the list of cmdlets.
 
-## Available cmdlets
+## List of cmdlets
 
 `Copy-ToLabUserDesktop`  
 `Disconnect-AnyUser`  
