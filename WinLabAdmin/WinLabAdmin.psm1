@@ -27,6 +27,7 @@ if (Test-Path -Path $configPath -PathType Leaf) {
     Write-Host $PSScriptRoot -ForegroundColor DarkYellow
     Write-Host "1. rename config.json.example to config.json"
     Write-Host "2. update config.json with lab computer names in your lab. Ignore Mac Addresses at this step"
+    Write-Host "3. open a new shell and try again"
     Exit 2 # file not found
 }
 
