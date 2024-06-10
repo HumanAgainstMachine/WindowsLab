@@ -96,7 +96,7 @@ PrivateData = @{
     PSData = @{
 
         # Tags applied to this module. These help with module discovery in online galleries.
-        Tags = @('Windows 10', 'Windows 11', 'Powershell 7', 'Administration', 'Windows Lab')
+        Tags = @('Windows-10', 'Windows-11', 'Powershell-7', 'Administration', 'Windows-Lab')
 
         # A URL to the license for this module.
         LicenseUri = 'https://github.com/HumanAgainstMachine/WindowsLabAdmin?tab=MIT-1-ov-file'
