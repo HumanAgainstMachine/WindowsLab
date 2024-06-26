@@ -560,3 +560,48 @@ function Restore-LabComputerDesktop {
         }
     }
 }
+
+function Set-ScheduleStop {
+    <#
+    .SYNOPSIS
+    .DESCRIPTION
+    .EXAMPLE
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$True, HelpMessage="Enter Shut Down Schedule Time")]
+        [string]$Time
+    )
+
+    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+
+    
+        # Define the trigger
+        $trigger = New-ScheduledTaskTrigger -Daily -At $Using:Time
+    
+        # Define the action 
+        $action = New-ScheduledTaskAction -Execute 'Powershell' `
+                    -Argument "-NoProfile -ExecutionPolicy Bypass -File $env:userprofile\PeriodicTasks\daily.ps1" `
+                    -WorkingDirectory "$env:userprofile\PeriodicTasks"
+    
+        # Register the trigger
+        Register-ScheduledTask -TaskName 'PeriodicTask' -TaskPath 'human.against.machine' -Action $action `
+                    -Trigger $trigger -User "$env:userdomain\$env:username" -Password "PSAdminPassword" -RunLevel Highest
+           
+    
+        # Update trigger Task
+        $newTrigger= New-ScheduledTaskTrigger -Daily -At $Using:Time
+        Set-ScheduledTask -TaskName "PeriodicTask" -TaskPath 'human.against.machine' -Trigger $newTrigger  `
+                          -User "$env:userdomain\$env:username" -Password "PSAdminPassword"
+        
+        Write-Host "Set task at '$Using:Time' on $env:computername ..." -ForegroundColor Green
+    
+    }
+    
+    
+    
+    # Get scheduled tasks (The task path always starts and ends with a backslash \)
+    # Get-ScheduledTask -TaskPath '\human.against.machine\'
+    # Get-ScheduledTask -TaskName 'Lazy PS Tasks' -TaskPath \LazyTasks\ | Select *    
+    
+}
