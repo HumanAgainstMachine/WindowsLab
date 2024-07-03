@@ -561,7 +561,7 @@ function Restore-LabComputerDesktop {
     }
 }
 
-function Set-ScheduleStop {
+function Set-LabComputerDailyStop {
     <#
     .SYNOPSIS
     .DESCRIPTION
@@ -570,8 +570,12 @@ function Set-ScheduleStop {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$True, HelpMessage="Enter Shut Down Schedule Time")]
-        [string]$Time
+        [string]$Time,
+        [Parameter(Mandatory=$True, HelpMessage="Enter the LabComputer Admin password")]
+        [securestring]$Password        
     )
+
+    $p = ConvertFrom-SecureString -SecureString $Password -AsPlainText
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
 
@@ -581,18 +585,17 @@ function Set-ScheduleStop {
     
         # Define the action 
         $action = New-ScheduledTaskAction -Execute 'Powershell' `
-                    -Argument "-NoProfile -ExecutionPolicy Bypass -File $env:userprofile\PeriodicTasks\daily.ps1" `
-                    -WorkingDirectory "$env:userprofile\PeriodicTasks"
+                    -Argument "-NoProfile -ExecutionPolicy Bypass -NoExit -Command 'Stop-Computer -Force'" `
+                    # -WorkingDirectory "$env:userprofile\PeriodicTasks"
     
-        # Register the trigger
-        Register-ScheduledTask -TaskName 'PeriodicTask' -TaskPath 'human.against.machine' -Action $action `
-                    -Trigger $trigger -User "$env:userdomain\$env:username" -Password "PSAdminPassword" -RunLevel Highest
+        # Register the trigger (-TaskPath is the folder)
+        # Register-ScheduledTask -TaskName 'StopLabComputer' -TaskPath 'WinLabAdmin' -Action $action `
+        #             -Trigger $trigger -User "$env:userdomain\$env:username" -Password $Using:p  -RunLevel Highest
            
     
         # Update trigger Task
-        $newTrigger= New-ScheduledTaskTrigger -Daily -At $Using:Time
-        Set-ScheduledTask -TaskName "PeriodicTask" -TaskPath 'human.against.machine' -Trigger $newTrigger  `
-                          -User "$env:userdomain\$env:username" -Password "PSAdminPassword"
+        Set-ScheduledTask -TaskName "StopLabComputer" -TaskPath 'WinLabAdmin' -Action $action `
+                    -Trigger $trigger  -User "$env:userdomain\$env:username" -Password $Using:p
         
         Write-Host "Set task at '$Using:Time' on $env:computername ..." -ForegroundColor Green
     
@@ -602,6 +605,5 @@ function Set-ScheduleStop {
     
     # Get scheduled tasks (The task path always starts and ends with a backslash \)
     # Get-ScheduledTask -TaskPath '\human.against.machine\'
-    # Get-ScheduledTask -TaskName 'Lazy PS Tasks' -TaskPath \LazyTasks\ | Select *    
-    
+    # Get-ScheduledTask -TaskName 'Lazy PS Tasks' -TaskPath \LazyTasks\ | Select *       
 }
