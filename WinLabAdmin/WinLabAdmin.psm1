@@ -577,6 +577,9 @@ function Set-LabComputerDailyStop {
 
     $p = ConvertFrom-SecureString -SecureString $Password -AsPlainText
 
+    # Compose TaskName based on time
+    $taskName = "StopComputerAt" + $Time.Replace(":", ".")
+
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
 
     
@@ -585,22 +588,31 @@ function Set-LabComputerDailyStop {
     
         # Define the action 
         $action = New-ScheduledTaskAction -Execute 'Powershell' `
-                    -Argument "-NoProfile -ExecutionPolicy Bypass -NoExit -Command 'Stop-Computer -Force'" `
+                    -Argument '-NoProfile -ExecutionPolicy Bypass -NoExit -Command "& {Stop-Computer -Force}"' `
                     # -WorkingDirectory "$env:userprofile\PeriodicTasks"
     
         # Register the trigger (-TaskPath is the folder)
-        # Register-ScheduledTask -TaskName 'StopLabComputer' -TaskPath 'WinLabAdmin' -Action $action `
-        #             -Trigger $trigger -User "$env:userdomain\$env:username" -Password $Using:p  -RunLevel Highest
-           
+        # $resObj = Register-ScheduledTask -TaskName $Using:taskName -TaskPath 'WinLabAdmin' -Action $action `
+        #             -Trigger $trigger -User "$env:userdomain\$env:username" -Password $Using:p  -RunLevel Highest |
+        #             Select-Object -Property PSComputerName, TaskName, -TaskPath
+
+
+        # Unregister-ScheduledTask -TaskName 'PeriodicTask'
+        # Write-Host "on $env:computername"
+
+        $resObj = Get-ScheduledTask -TaskPath '\WinLabAdmin\' | Select-Object -Property TaskName
+
+        Write-Host $env:COMPUTERNAME -ForegroundColor DarkYellow
+        Write-Host " " -NoNewline
+        Write-Host $resObj.TaskName -Separator "`n"
     
         # Update trigger Task
-        Set-ScheduledTask -TaskName "StopLabComputer" -TaskPath 'WinLabAdmin' -Action $action `
-                    -Trigger $trigger  -User "$env:userdomain\$env:username" -Password $Using:p
+        # Set-ScheduledTask -TaskName $Using:taskName -TaskPath 'WinLabAdmin' -Action $action `
+        #             -Trigger $trigger  -User "$env:userdomain\$env:username" -Password $Using:p
         
-        Write-Host "Set task at '$Using:Time' on $env:computername ..." -ForegroundColor Green
+        # Write-Host "Set task at '$Using:Time' on $env:computername ..." -ForegroundColor Green
     
     }
-    
     
     
     # Get scheduled tasks (The task path always starts and ends with a backslash \)
