@@ -577,7 +577,7 @@ function Set-LabComputerDailyStop {
 
     $p = ConvertFrom-SecureString -SecureString $Password -AsPlainText
 
-    # Compose TaskName based on time
+    # Compose TaskName based on daily time
     $taskName = "StopComputerAt" + $Time.Replace(":", ".")
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
@@ -600,11 +600,7 @@ function Set-LabComputerDailyStop {
         # Unregister-ScheduledTask -TaskName 'PeriodicTask'
         # Write-Host "on $env:computername"
 
-        $resObj = Get-ScheduledTask -TaskPath '\WinLabAdmin\' | Select-Object -Property TaskName
 
-        Write-Host $env:COMPUTERNAME -ForegroundColor DarkYellow
-        Write-Host " " -NoNewline
-        Write-Host $resObj.TaskName -Separator "`n"
     
         # Update trigger Task
         # Set-ScheduledTask -TaskName $Using:taskName -TaskPath 'WinLabAdmin' -Action $action `
@@ -618,4 +614,50 @@ function Set-LabComputerDailyStop {
     # Get scheduled tasks (The task path always starts and ends with a backslash \)
     # Get-ScheduledTask -TaskPath '\human.against.machine\'
     # Get-ScheduledTask -TaskName 'Lazy PS Tasks' -TaskPath \LazyTasks\ | Select *       
+}
+
+function Get-LabComputerStop {
+    <#
+    .SYNOPSIS
+        Gets scheduled computer stops
+
+    .DESCRIPTION
+        This cmdlet searches in task scheduler computer stops set by Set-LabComputerStop cmdlet
+        
+    .EXAMPLE
+        Get-LabComputerStop
+
+        Get-LabComputerStop -DailyTime '14:14'
+    #>
+    [CmdletBinding()]
+    param (
+        [string]$DailyTime
+    )
+
+    $taskName = ''
+    $DailyTimeIsPresent = $PSBoundParameters.ContainsKey("DailyTime")
+    if ($DailyTimeIsPresent) {
+        # Compose TaskName based on time
+        $taskName = "StopComputerAt" + $DailyTime.Replace(":", ".")
+    }
+
+    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+        
+        $outMessage = "`n${env:COMPUTERNAME}: `n    "
+        try {
+            if ($Using:DailyTimeIsPresent) {
+                $resObj = Get-ScheduledTask -TaskName:$Using:taskName -ErrorAction Stop | Select-Object -Property TaskName
+            } else {
+                $resObj = Get-ScheduledTask -TaskPath '\WinLabAdmin\' -ErrorAction Stop | Select-Object -Property TaskName
+            }
+            $outMessage += $resObj.TaskName -join ", "
+            Write-Host $outMessage -ForegroundColor Green
+        }
+        catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+            # $_.exception.Message
+            $outMessage += "${Using:taskName} not found"
+            Write-Host $outMessage -ForegroundColor Red
+        }
+    }      
+
 }
