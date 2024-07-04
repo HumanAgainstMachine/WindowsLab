@@ -608,12 +608,35 @@ function Set-LabComputerDailyStop {
         
         # Write-Host "Set task at '$Using:Time' on $env:computername ..." -ForegroundColor Green
     
+    }  
+}
+
+function Remove-LabComputerStop {
+    <#
+    .SYNOPSIS
+        Removes scheduled computer stops
+
+    .DESCRIPTION
+        This cmdlet unregister in task scheduler computer stops set by Set-LabComputerStop cmdlet
+
+    .EXAMPLE
+        Remove-LabComputerStop
+
+        Remove-LabComputerStop -DailyTime '14:14'
+    #>
+    [CmdletBinding()]
+    param (
+        [string]$DailyTime
+    )
+
+    $taskName = ''
+    $DailyTimeIsPresent = $PSBoundParameters.ContainsKey("DailyTime")
+    if ($DailyTimeIsPresent) {
+        # Compose TaskName based on time
+        $taskName = "StopComputerAt" + $DailyTime.Replace(":", ".")
     }
-    
-    
-    # Get scheduled tasks (The task path always starts and ends with a backslash \)
-    # Get-ScheduledTask -TaskPath '\human.against.machine\'
-    # Get-ScheduledTask -TaskName 'Lazy PS Tasks' -TaskPath \LazyTasks\ | Select *       
+
+    Invoke-Command -ComputerName $labComputerList -ScriptBlock {  }  
 }
 
 function Get-LabComputerStop {
@@ -623,7 +646,7 @@ function Get-LabComputerStop {
 
     .DESCRIPTION
         This cmdlet searches in task scheduler computer stops set by Set-LabComputerStop cmdlet
-        
+
     .EXAMPLE
         Get-LabComputerStop
 
