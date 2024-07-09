@@ -561,16 +561,21 @@ function Restore-LabComputerDesktop {
     }
 }
 
-function Set-LabComputerDailyStop {
+function New-LabComputerStop {
     <#
     .SYNOPSIS
+        Create a scheduled Lab Computer stop
+
     .DESCRIPTION
+        This cmdlet register in the task scheduler a computer stop at DailyTime
+
     .EXAMPLE
+        New-LabComputerStop -DailyTime '14:15'
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory=$True, HelpMessage="Enter Shut Down Schedule Time")]
-        [string]$Time,
+        [Parameter(Mandatory=$True, HelpMessage="Enter Stop daily time")]
+        [string]$DailyTime,
         [Parameter(Mandatory=$True, HelpMessage="Enter the LabComputer Admin password")]
         [securestring]$Password        
     )
@@ -578,36 +583,27 @@ function Set-LabComputerDailyStop {
     $p = ConvertFrom-SecureString -SecureString $Password -AsPlainText
 
     # Compose TaskName based on daily time
-    $taskName = "StopComputerAt" + $Time.Replace(":", ".")
+    $taskName = "StopAt" + $DailyTime.Replace(":", ".")
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
 
-    
         # Define the trigger
-        $trigger = New-ScheduledTaskTrigger -Daily -At $Using:Time
+        $trigger = New-ScheduledTaskTrigger -Daily -At $Using:DailyTime
     
         # Define the action 
         $action = New-ScheduledTaskAction -Execute 'Powershell' `
-                    -Argument '-NoProfile -ExecutionPolicy Bypass -NoExit -Command "& {Stop-Computer -Force}"' `
-                    # -WorkingDirectory "$env:userprofile\PeriodicTasks"
-    
-        # Register the trigger (-TaskPath is the folder)
-        # $resObj = Register-ScheduledTask -TaskName $Using:taskName -TaskPath 'WinLabAdmin' -Action $action `
-        #             -Trigger $trigger -User "$env:userdomain\$env:username" -Password $Using:p  -RunLevel Highest |
-        #             Select-Object -Property PSComputerName, TaskName, -TaskPath
+                    -Argument '-NoProfile -ExecutionPolicy Bypass -Command "& {Stop-Computer -Force}"'
 
-
-        # Unregister-ScheduledTask -TaskName 'PeriodicTask'
-        # Write-Host "on $env:computername"
-
-
-    
-        # Update trigger Task
-        # Set-ScheduledTask -TaskName $Using:taskName -TaskPath 'WinLabAdmin' -Action $action `
-        #             -Trigger $trigger  -User "$env:userdomain\$env:username" -Password $Using:p
-        
-        # Write-Host "Set task at '$Using:Time' on $env:computername ..." -ForegroundColor Green
-    
+        try {
+            Get-ScheduledTask -TaskName:$Using:taskName -ErrorAction Stop | Out-Null
+            Write-Host "Stop $env:computername at '$Using:DailyTime' already scheduled" -ForegroundColor DarkYellow            
+        }
+        catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+            # Create the task (-TaskPath is the folder)
+            $resObj = Register-ScheduledTask -TaskName $Using:taskName -TaskPath 'WinLabAdmin' -Action $action `
+                        -Trigger $trigger -User "$env:userdomain\$env:username" -Password $Using:p  -RunLevel Highest
+            Write-Host "Created task $TaskName on $env:computername ..." -ForegroundColor Green
+        }
     }  
 }
 
@@ -633,10 +629,18 @@ function Remove-LabComputerStop {
     $DailyTimeIsPresent = $PSBoundParameters.ContainsKey("DailyTime")
     if ($DailyTimeIsPresent) {
         # Compose TaskName based on time
-        $taskName = "StopComputerAt" + $DailyTime.Replace(":", ".")
+        $taskName = "StopAt" + $DailyTime.Replace(":", ".")
     }
 
-    Invoke-Command -ComputerName $labComputerList -ScriptBlock {  }  
+    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+        try {
+            Unregister-ScheduledTask -TaskName:$Using:taskName -Confirm:$false -ErrorAction Stop
+            Write-Host "Task $Using:taskName removed from $env:COMPUTERNAME" -ForegroundColor Green            
+        }
+        catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+            Write-Host "Task $Using:taskName not found on $env:COMPUTERNAME" -ForegroundColor Red
+        }
+    }  
 }
 
 function Get-LabComputerStop {
@@ -677,7 +681,6 @@ function Get-LabComputerStop {
             Write-Host $outMessage -ForegroundColor Green
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-            # $_.exception.Message
             $outMessage += "${Using:taskName} not found"
             Write-Host $outMessage -ForegroundColor Red
         }
