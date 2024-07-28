@@ -564,10 +564,10 @@ function Restore-LabComputerDesktop {
 function New-LabComputerStop {
     <#
     .SYNOPSIS
-        Create a scheduled Lab Computer stop
+        Schedule a new Lab Computer daily stop
 
     .DESCRIPTION
-        This cmdlet register in the task scheduler a computer stop at DailyTime
+        This cmdlet creates the new task StopThisComputer and if the task already exist, just adds the new stop time as a trigger to the task
 
     .EXAMPLE
         New-LabComputerStop -DailyTime '14:15'
@@ -575,23 +575,23 @@ function New-LabComputerStop {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$True, HelpMessage="Enter the daily stop time")]
-        [string]$DailyTimeStr
+        [string]$DailyTime
     )
 
     # Time parameter parsing
     try {
-        $dailyTime = [DateTime]::ParseExact($DailyTimeStr, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
+        $dailyTimeObj = [DateTime]::ParseExact($DailyTime, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
     }
     catch {
-        Write-Error "Failed to parse the time $DailyTimeStr ..."
+        Write-Error "Failed to parse the time $DailyTime ..."
         return $null
     }
 
-    # Transform $DailyTimeStr to a TimeSpan object
-    $dailyStopTime = $dailyTime.TimeOfDay    
+    # Convert $DailyTimeObj to a TimeSpan object
+    $dailyStopTime = $dailyTimeObj.TimeOfDay    
 
     # Set the new daily stop time trigger
-    $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTime
+    $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTimeObj
 
     # Set the action 
     $action = New-ScheduledTaskAction -Execute 'Powershell' -Argument '-NoProfile -ExecutionPolicy Bypass -Command "& {Stop-Computer -Force}"'    
@@ -614,19 +614,19 @@ function New-LabComputerStop {
 
             # Check if the new stop time is already set
             if ($using:dailyStopTime -in $presetDailyStopTimes) {
-                Write-Host "Stop at daily time $using:DailyTimeStr already exist" -ForegroundColor Red
+                Write-Host "Stop at daily time $using:DailyTime already exist on $env:computername" -ForegroundColor Red
             } else {
                 # Add the new stop time
                 $stopThisComputerTask.Triggers += $using:trigger
                 Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
-                Write-Host "New stop at daily time $using:DailyTimeStr added to $env:computername" -ForegroundColor Green
+                Write-Host "New stop at daily time $using:DailyTime added to $env:computername" -ForegroundColor Green
             }
         } else {# StopThisComputerTask first set
 
             # Register the task (-TaskPath is the folder)
             Register-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Action $using:action -Trigger $using:trigger -Principal $principal | Out-Null
             Write-Host "StopThisComputer task first time set ..."
-            Write-Host "New stop at daily time $using:DailyTimeStr just set on $env:computername" -ForegroundColor Green
+            Write-Host "New stop at daily time $using:DailyTime just set on $env:computername" -ForegroundColor Green
         }
     }  
 }
