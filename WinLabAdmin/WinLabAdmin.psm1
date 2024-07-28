@@ -631,6 +631,48 @@ function New-LabComputerStop {
     }  
 }
 
+function Get-LabComputerStop {
+    <#
+    .SYNOPSIS
+        Gets Lab computer daily stops
+
+    .DESCRIPTION
+        This cmdlet gets all trigger times for StopThisComputer scheduled task
+
+    .EXAMPLE
+        Get-LabComputerStop
+    #>
+    [CmdletBinding()]
+    param ()
+
+    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+
+        $formattedTime = "`n${env:COMPUTERNAME}:`n  "
+        try {
+            # Get scheduled StopThisComputer task if exist
+            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
+
+            # Get preset daily stop times as TimeSpan objets
+            $presetDailyStopTimes = @()
+            foreach ($trg in $stopThisComputerTask.Triggers) {
+                $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
+            }     
+            
+            # Print the array in "hh:mm" format
+            foreach ($timeSpan in $presetDailyStopTimes) {
+                $formattedTime += "{0:hh\:mm\,\ }" -f $timeSpan
+            }   
+            $formattedTime = $formattedTime.Substring(0, $formattedTime.Length - 2)
+            Write-Host $formattedTime         
+        }
+        catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+            # $_.exception.GetType().fullname
+            $formattedTime += "Stop time not set"
+            Write-Host Write-host $formattedTime
+        }
+    }      
+}
+
 function Remove-LabComputerStop {
     <#
     .SYNOPSIS
@@ -665,49 +707,4 @@ function Remove-LabComputerStop {
             Write-Host "Task $Using:taskName not found on $env:COMPUTERNAME" -ForegroundColor Red
         }
     }  
-}
-
-function Get-LabComputerStop {
-    <#
-    .SYNOPSIS
-        Gets scheduled computer stops
-
-    .DESCRIPTION
-        This cmdlet searches in task scheduler computer stops set by Set-LabComputerStop cmdlet
-
-    .EXAMPLE
-        Get-LabComputerStop
-
-        Get-LabComputerStop -DailyTime '14:14'
-    #>
-    [CmdletBinding()]
-    param (
-        [string]$DailyTime
-    )
-
-    $taskName = ''
-    $DailyTimeIsPresent = $PSBoundParameters.ContainsKey("DailyTime")
-    if ($DailyTimeIsPresent) {
-        # Compose TaskName based on time
-        $taskName = "StopComputerAt" + $DailyTime.Replace(":", ".")
-    }
-
-    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
-        
-        $outMessage = "`n${env:COMPUTERNAME}: `n    "
-        try {
-            if ($Using:DailyTimeIsPresent) {
-                $resObj = Get-ScheduledTask -TaskName:$Using:taskName -ErrorAction Stop | Select-Object -Property TaskName
-            } else {
-                $resObj = Get-ScheduledTask -TaskPath '\WinLabAdmin\' -ErrorAction Stop | Select-Object -Property TaskName
-            }
-            $outMessage += $resObj.TaskName -join ", "
-            Write-Host $outMessage -ForegroundColor Green
-        }
-        catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-            $outMessage += "${Using:taskName} not found"
-            Write-Host $outMessage -ForegroundColor Red
-        }
-    }      
-
 }
