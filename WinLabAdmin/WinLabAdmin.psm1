@@ -676,10 +676,10 @@ function Get-LabComputerStop {
 function Remove-LabComputerStop {
     <#
     .SYNOPSIS
-        Removes scheduled computer stops
+        Removes Lab computer daily stops
 
     .DESCRIPTION
-        This cmdlet unregister in task scheduler computer stops set by Set-LabComputerStop cmdlet
+        This cmdlet removes trigger times for StopThisComputer scheduled task
 
     .EXAMPLE
         Remove-LabComputerStop
@@ -691,20 +691,53 @@ function Remove-LabComputerStop {
         [string]$DailyTime
     )
 
-    $taskName = ''
-    $DailyTimeIsPresent = $PSBoundParameters.ContainsKey("DailyTime")
-    if ($DailyTimeIsPresent) {
-        # Compose TaskName based on time
-        $taskName = "StopAt" + $DailyTime.Replace(":", ".")
+    if ([string]::IsNullOrEmpty($OptionalParam)) {
+        # Remove all stop times
+        $trigger = $null
     }
+    else {
+        # Remove provided time
+
+        # Time parameter parsing
+        try {
+            $dailyTimeObj = [DateTime]::ParseExact($DailyTime, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
+        }
+        catch {
+            Write-Error "Failed to parse the time $DailyTime ..."
+            return $null
+        }
+        
+        # Convert $DailyTimeObj to a TimeSpan object
+        $dailyStopTime = $dailyTimeObj.TimeOfDay    
+
+        # Set the daily stop time trigger to remove
+        $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTimeObj
+    }    
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+        
+        $formattedTime = "`n${env:COMPUTERNAME}:`n  "
         try {
-            Unregister-ScheduledTask -TaskName:$Using:taskName -Confirm:$false -ErrorAction Stop
-            Write-Host "Task $Using:taskName removed from $env:COMPUTERNAME" -ForegroundColor Green            
+            # Get scheduled StopThisComputer task if exist
+            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
+
+            # Get preset daily stop times as TimeSpan objets
+            $presetDailyStopTimes = @()
+            foreach ($trg in $stopThisComputerTask.Triggers) {
+                $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
+            }     
+            
+            # Print the array in "hh:mm" format
+            foreach ($timeSpan in $presetDailyStopTimes) {
+                $formattedTime += "{0:hh\:mm\,\ }" -f $timeSpan
+            }   
+            $formattedTime = $formattedTime.Substring(0, $formattedTime.Length - 2)
+            Write-Host $formattedTime         
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-            Write-Host "Task $Using:taskName not found on $env:COMPUTERNAME" -ForegroundColor Red
+            # $_.exception.GetType().fullname
+            $formattedTime += "Stop time not set"
+            Write-Host Write-host $formattedTime
         }
     }  
 }
