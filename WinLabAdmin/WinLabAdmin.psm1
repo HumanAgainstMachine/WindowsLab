@@ -688,56 +688,54 @@ function Remove-LabComputerStop {
     #>
     [CmdletBinding()]
     param (
+        [Parameter(Mandatory=$True, HelpMessage="Enter daily stop time to remove")]
         [string]$DailyTime
     )
 
-    if ([string]::IsNullOrEmpty($OptionalParam)) {
-        # Remove all stop times
-        $trigger = $null
+    # Time parameter parsing
+    try {
+        $dailyTimeObj = [DateTime]::ParseExact($DailyTime, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
     }
-    else {
-        # Remove provided time
+    catch {
+        Write-Error "Failed to parse the time $DailyTime ..."
+        return $null
+    }
+    
+    # Convert $DailyTimeObj to a TimeSpan object
+    $dailyStopTime = $dailyTimeObj.TimeOfDay    
 
-        # Time parameter parsing
-        try {
-            $dailyTimeObj = [DateTime]::ParseExact($DailyTime, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
-        }
-        catch {
-            Write-Error "Failed to parse the time $DailyTime ..."
-            return $null
-        }
-        
-        # Convert $DailyTimeObj to a TimeSpan object
-        $dailyStopTime = $dailyTimeObj.TimeOfDay    
-
-        # Set the daily stop time trigger to remove
-        $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTimeObj
-    }    
+    # Set the daily stop time trigger to remove
+    $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTimeObj
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
         
-        $formattedTime = "`n${env:COMPUTERNAME}:`n  "
         try {
             # Get scheduled StopThisComputer task if exist
             $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
+
+            # Set principal contex for SYSTEM account to run as a service with with the highest privileges
+            $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest            
 
             # Get preset daily stop times as TimeSpan objets
             $presetDailyStopTimes = @()
             foreach ($trg in $stopThisComputerTask.Triggers) {
                 $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
-            }     
-            
-            # Print the array in "hh:mm" format
-            foreach ($timeSpan in $presetDailyStopTimes) {
-                $formattedTime += "{0:hh\:mm\,\ }" -f $timeSpan
-            }   
-            $formattedTime = $formattedTime.Substring(0, $formattedTime.Length - 2)
-            Write-Host $formattedTime         
+            }
+
+            # Check if the stop time to remove is present
+            if ($using:dailyStopTime -in $presetDailyStopTimes) {
+                $indx = $presetDailyStopTimes.IndexOf($using:dailyStopTime)
+                $stopThisComputerTask.Triggers = $stopThisComputerTask.Triggers | Where-Object {$_ -ne $stopThisComputerTask.Triggers[$indx]}
+                Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
+                Write-Host "Stop daily time $using:DailyTime removed on $env:computername" -ForegroundColor Green
+            } else {
+                Write-Host "Stop daily time $using:DailyTime not exist on $env:computername" -ForegroundColor Red
+            }            
+                
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
-            $formattedTime += "Stop time not set"
-            Write-Host Write-host $formattedTime
+            Write-Host "StopThisComputer task not exist, nothing to remove so"
         }
     }  
 }
