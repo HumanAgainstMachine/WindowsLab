@@ -705,37 +705,38 @@ function Remove-LabComputerStop {
     $dailyStopTime = $dailyTimeObj.TimeOfDay    
 
     # Set the daily stop time trigger to remove
-    $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTimeObj
+    # $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTimeObj
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
         
         try {
             # Get scheduled StopThisComputer task if exist
             $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
-
-            # Set principal contex for SYSTEM account to run as a service with with the highest privileges
-            $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest            
-
-            # Get preset daily stop times as TimeSpan objets
-            $presetDailyStopTimes = @()
-            foreach ($trg in $stopThisComputerTask.Triggers) {
-                $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
-            }
-
-            # Check if the stop time to remove is present
-            if ($using:dailyStopTime -in $presetDailyStopTimes) {
-                $indx = $presetDailyStopTimes.IndexOf($using:dailyStopTime)
-                $stopThisComputerTask.Triggers = $stopThisComputerTask.Triggers | Where-Object {$_ -ne $stopThisComputerTask.Triggers[$indx]}
-                Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
-                Write-Host "Stop daily time $using:DailyTime removed on $env:computername" -ForegroundColor Green
-            } else {
-                Write-Host "Stop daily time $using:DailyTime not exist on $env:computername" -ForegroundColor Red
-            }            
-                
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
             Write-Host "StopThisComputer task not exist, nothing to remove so"
+            Return $null
+        }            
+
+        # Set principal contex for SYSTEM account to run as a service with with the highest privileges
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest            
+
+        # Get preset daily stop times as TimeSpan objets
+        $presetDailyStopTimes = @()
+        foreach ($trg in $stopThisComputerTask.Triggers) {
+            $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
         }
+
+        # Check if the stop time to remove is present
+        if ($using:dailyStopTime -in $presetDailyStopTimes) {
+            $indx = $presetDailyStopTimes.IndexOf($using:dailyStopTime)
+            $stopThisComputerTask.Triggers = $stopThisComputerTask.Triggers | Where-Object {$_ -ne $stopThisComputerTask.Triggers[$indx]}
+            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
+            Write-Host "Stop daily time $using:DailyTime removed on $env:computername" -ForegroundColor Green
+        } else {
+            Write-Host "Stop daily time $using:DailyTime not exist on $env:computername" -ForegroundColor Red
+        }                 
+
     }  
 }
