@@ -1,6 +1,6 @@
 # Remove stop time trigger
 
-$DailyTime = '22:00'
+$DailyTime = '23:00'
 $dailyTimeObj = [DateTime]::ParseExact($DailyTime, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
 
 $dailyStopTime = $dailyTimeObj.TimeOfDay 
@@ -18,18 +18,17 @@ catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
 # Set principal contex for SYSTEM account to run as a service with with the highest privileges
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest            
 
-# Get preset daily stop times as TimeSpan objets
-$presetDailyStopTimes = @()
+# Remove the given time stop trigger 
+$triggers = @()
 foreach ($trg in $stopThisComputerTask.Triggers) {
-    $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
+    if (([datetime] $trg.StartBoundary).TimeOfDay -ne $dailyStopTime) {
+        $triggers += $trg
+    }
 }
 
-# Check if the stop time to remove is present
-if ($dailyStopTime -in $presetDailyStopTimes) {
-    $indx = $presetDailyStopTimes.IndexOf($dailyStopTime)
-    $stopTriggers = $stopThisComputerTask.Triggers | Where-Object {$stopThisComputerTask.Triggers.IndexOf($_) -ne $indx}
-    Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopTriggers -Principal $principal | Out-Null
-    Write-Host "Stop daily time $DailyTime removed on $env:computername" -ForegroundColor Green
+if ($triggers.count -lt $stopThisComputerTask.Triggers.count) {
+    Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $triggers -Principal $principal | Out-Null
+    Write-Host "Stop daily time $DailyTime removed on $env:computername" -ForegroundColor Green    
 } else {
     Write-Host "Stop daily time $DailyTime not exist on $env:computername" -ForegroundColor Red
-}                 
+}
