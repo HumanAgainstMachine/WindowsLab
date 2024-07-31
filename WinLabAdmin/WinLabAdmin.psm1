@@ -583,7 +583,7 @@ function New-LabComputerStop {
         $dailyTimeObj = [DateTime]::ParseExact($DailyTime, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
     }
     catch {
-        Write-Error "Failed to parse the time $DailyTime ..."
+        Write-Error "-DailyTime $DailyTime must be in HH:mm format"
         return $null
     }
 
@@ -598,36 +598,37 @@ function New-LabComputerStop {
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
 
-        # Get scheduled StopThisComputer task if exist
-        $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction SilentlyContinue
-
         # Set principal contex for SYSTEM account to run as a service with with the highest privileges
-        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest        
 
-        if ($null -ne $stopThisComputerTask) {# StopThisComputerTask already set
-
-            # Get preset daily stop times as TimeSpan objets
-            $presetDailyStopTimes = @()
-            foreach ($trg in $stopThisComputerTask.Triggers) {
-                $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
-            }
-
-            # Check if the new stop time is already set
-            if ($using:dailyStopTime -in $presetDailyStopTimes) {
-                Write-Host "Stop at daily time $using:DailyTime already exist on $env:computername" -ForegroundColor Red
-            } else {
-                # Add the new stop time
-                $stopThisComputerTask.Triggers += $using:trigger
-                Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
-                Write-Host "New stop at daily time $using:DailyTime added to $env:computername" -ForegroundColor Green
-            }
-        } else {# StopThisComputerTask first set
-
+        try {
+            # Get scheduled StopThisComputer task if exist
+            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
+        }
+        catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # Register the task (-TaskPath is the folder)
             Register-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Action $using:action -Trigger $using:trigger -Principal $principal | Out-Null
             Write-Host "First stop daily time $using:DailyTime just set on $env:computername" -ForegroundColor Green
             Write-Host " ... and StopThisComputer task set`n"
+            Return $null
         }
+
+        # Get preset daily stop times as TimeSpan objets
+        $presetDailyStopTimes = @()
+        foreach ($trg in $stopThisComputerTask.Triggers) {
+            $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
+        }
+
+        # Check if the new stop time is already set
+        if ($using:dailyStopTime -in $presetDailyStopTimes) {
+            Write-Host "Stop at daily time $using:DailyTime already exist on $env:computername" -ForegroundColor Red
+        } else {
+            # Add the new stop time
+            $stopThisComputerTask.Triggers += $using:trigger
+            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
+            Write-Host "New stop at daily time $using:DailyTime added to $env:computername" -ForegroundColor Green
+        }
+
     }  
 }
 
@@ -651,25 +652,26 @@ function Get-LabComputerStop {
         try {
             # Get scheduled StopThisComputer task if exist
             $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
-
-            # Get preset daily stop times as TimeSpan objets
-            $presetDailyStopTimes = @()
-            foreach ($trg in $stopThisComputerTask.Triggers) {
-                $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
-            }     
-            
-            # Print the array in "hh:mm" format
-            foreach ($timeSpan in $presetDailyStopTimes) {
-                $formattedTime += "{0:hh\:mm\,\ }" -f $timeSpan
-            }   
-            $formattedTime = $formattedTime.Substring(0, $formattedTime.Length - 2)
-            Write-Host $formattedTime         
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
-            $formattedTime += "Stop time not set"
+            $formattedTime += "None"
             Write-Host $formattedTime
+            Return $null
         }
+
+        # Get preset daily stop times as TimeSpan objets
+        $presetDailyStopTimes = @()
+        foreach ($trg in $stopThisComputerTask.Triggers) {
+            $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
+        }     
+        
+        # Print the array in "hh:mm" format
+        foreach ($timeSpan in $presetDailyStopTimes) {
+            $formattedTime += "{0:hh\:mm\,\ }" -f $timeSpan
+        }   
+        $formattedTime = $formattedTime.Substring(0, $formattedTime.Length - 2)
+        Write-Host $formattedTime         
     }      
 }
 
@@ -695,7 +697,7 @@ function Remove-LabComputerStop {
         $dailyTimeObj = [DateTime]::ParseExact($DailyTime, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
     }
     catch {
-        Write-Error "Failed to parse the time $DailyTime ..."
+        Write-Error "-DailyTime $DailyTime must be in HH:mm format"
         return $null
     }
     
@@ -710,7 +712,7 @@ function Remove-LabComputerStop {
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
-            Write-Host "StopThisComputer task not exist, nothing to remove so"
+            Write-Host "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
             Return $null
         }            
 
