@@ -625,8 +625,8 @@ function New-LabComputerStop {
 
             # Register the task (-TaskPath is the folder)
             Register-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Action $using:action -Trigger $using:trigger -Principal $principal | Out-Null
-            Write-Host "StopThisComputer task first time set ..."
-            Write-Host "New stop at daily time $using:DailyTime just set on $env:computername" -ForegroundColor Green
+            Write-Host "First stop daily time $using:DailyTime just set on $env:computername" -ForegroundColor Green
+            Write-Host " ... and StopThisComputer task set`n"
         }
     }  
 }
@@ -668,7 +668,7 @@ function Get-LabComputerStop {
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
             $formattedTime += "Stop time not set"
-            Write-Host Write-host $formattedTime
+            Write-Host $formattedTime
         }
     }      
 }
@@ -676,14 +676,12 @@ function Get-LabComputerStop {
 function Remove-LabComputerStop {
     <#
     .SYNOPSIS
-        Removes Lab computer daily stops
+        Removes a Lab computer daily stop
 
     .DESCRIPTION
-        This cmdlet removes trigger times for StopThisComputer scheduled task
+        This cmdlet removes if exist the trigger from StopThisComputer scheduled task with time -DailyTime
 
     .EXAMPLE
-        Remove-LabComputerStop
-
         Remove-LabComputerStop -DailyTime '14:14'
     #>
     [CmdletBinding()]
@@ -702,10 +700,7 @@ function Remove-LabComputerStop {
     }
     
     # Convert $DailyTimeObj to a TimeSpan object
-    $dailyStopTime = $dailyTimeObj.TimeOfDay    
-
-    # Set the daily stop time trigger to remove
-    # $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTimeObj
+    $dailyStopTime = $dailyTimeObj.TimeOfDay
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
         
@@ -722,21 +717,26 @@ function Remove-LabComputerStop {
         # Set principal contex for SYSTEM account to run as a service with with the highest privileges
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest            
 
-        # Get preset daily stop times as TimeSpan objets
-        $presetDailyStopTimes = @()
+        # Remove the given time stop trigger 
+        $triggers = @()
         foreach ($trg in $stopThisComputerTask.Triggers) {
-            $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
+            if (([datetime] $trg.StartBoundary).TimeOfDay -ne $Using:dailyStopTime) {
+                $triggers += $trg
+            }
         }
-
-        # Check if the stop time to remove is present
-        if ($using:dailyStopTime -in $presetDailyStopTimes) {
-            $indx = $presetDailyStopTimes.IndexOf($using:dailyStopTime)
-            $stopThisComputerTask.Triggers = $stopThisComputerTask.Triggers | Where-Object {$_ -ne $stopThisComputerTask.Triggers[$indx]}
-            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
-            Write-Host "Stop daily time $using:DailyTime removed on $env:computername" -ForegroundColor Green
+        
+        
+        if ($triggers.Count -eq 0) {
+            Unregister-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Confirm:$false
+            Write-Host "Last Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
+            Write-Host " ... and StopThisComputer Task deleted`n"
+        }
+        elseif ($triggers.count -lt $stopThisComputerTask.Triggers.count) {
+            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $triggers -Principal $principal | Out-Null
+            Write-Host "Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green    
         } else {
-            Write-Host "Stop daily time $using:DailyTime not exist on $env:computername" -ForegroundColor Red
-        }                 
+            Write-Host "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
+        }     
 
     }  
 }
