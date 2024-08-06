@@ -1,12 +1,16 @@
-# Windows Lab Admin
+# WindowsLab
 
-This module is a collection of cmdlets to administer a ***computer lab*** based on Windows OS.
+Tools to administer a Windows OS computer lab. Tools are cmdlets packaged as a Powershell Module.
 
-A ***lab administrator*** usually has to perform the same operations on each computer like creating a new local account, setting a new password, restarting all computers, etc.
+Usually a ***Lab Admin*** has to perform the same operations on each computer lab like 
+* creating or removing a new local account, 
+* restarting all computers,
+* update date and time
+* etc.
 
-***WinLabAdmin*** module enables the administrator to perform those operations only once from his computer for every computer inside the lab.
+***WindowsLab*** enables the *Lab Admin* to perform those operations only once from his computer for every computer inside the lab.
 
-I use this module to administer the ***school computer labs*** where I work as an IT assistant. 
+I utilize this module to administer *Windows computer labs* at the school where I work as an IT assistant. 
 
 
 ### Based on Powershell Remoting Tecnology
@@ -15,44 +19,53 @@ It's ***PS remoting*** that permits you to run commands on a remote machine as i
 
 ## Terminology
 
-**Win Lab**  
-a computer lab where the administrator operates. Computers are equipped with Windows OS (10 or 11) and are connected to the same LAN.
+**Lab**  
+The computer lab where the administrator operates. Computers are equipped with Windows OS (10 or 11) and are connected to the same LAN.
 
-**Main computer**  
-the computer that the administrator uses to run this module cmdlets.
+**Admin computer**  
+The computer that the administrator uses to run this module cmdlets. It's connected to the same LAN.
 
 **Lab computer**  
-a computer available in the lab, remote-controlled from the Main computer. Lab computers have similar hardware and software characteristics.
+A computer available in the lab, remote-controlled from the Admin computer. Lab computers have similar hardware and software characteristics.
 
-**Lab User Account**  
-a local user account created on each lab computer with the same: `username`, `password`, and account type (Standard User or Administrator).  
-These accounts never expire, the password never expires and can't be changed by the lab user.
+**Lab admin**  
+The administrator of the lab. He has a local account on the Admin computer and each lab computer.
+
+**Lab User**  
+User with a generic username instead of a personal username, for example, *Student*, *Teacher*, or *Guest*.  
+
+ The lab user has a local account on each lab computer with the same: `username`, `password`, and account type (Standard User or Administrator). These accounts never expire, the password never expires and can't be changed by the lab user.
   
 ## Getting the Lab ready
-At this time, you need to move from computer to computer in the lab to operate.
 
-Create the *Administrator* ***Lab User Account*** on each computer. Good usernames are ***LabAdmin*** or ***PSAdmin***, let's use ***PSAdmin***. You also need to create this account on the ***Main computer***.
+Before using the Windowslab module, you must prepare the lab and set up each computer individually. 
 
-Log in to each ***PSAdmin*** account created and follow these steps
+On the *Admin computer*, create the *Lab admin* account with administrator privileges. The username I prefer is ***LabAdmin***. Set a strong password.
+
+Log in to the *LabAdmin* account just created and follow these three steps:
 
 1. Install Powershell ver 7.1+
 2. Set network to *private* in Windows settings
 3. Open the PS terminal as administrator and launch `Enable-PSRemoting` command 
-4. *Main computer only*
-    - Open the PS terminal and launch `Set-Item -Path WSMan:\localhost\client\TrustedHosts -Value *`  
-    ***Disclaimer***: you are responsible for handling security issues. For instance, the *Main computer* should only be accessible to you, and the *PSAdmin* password should be known exclusively by you.
 
-## Installation
-Install [WinLabAdmin](https://www.powershellgallery.com/packages/WinLabAdmin/0.0.1) from PowerShell Gallery.
+Additionally, just on the *Admin computer*, launch the command:  
+`Set-Item -Path WSMan:\localhost\client\TrustedHosts -Value *`  
 
-You need to install the module only on the ***Main computer***.
- 
-1. Log in to ***PSAdmin*** account
-2. `PS> Install-Module -Name WinLabAdmin`
-3. Close and reopen the terminal and aunch `get-command -Module WinLabAdmin`
+>***Disclaimer***:  
+you are responsible for handling security issues.  
+For instance, the *Admin computer* should only be accessible to you, and the *LabAdmin* password should be robust and secret.
+
+Now, with patience, do the same on each Lab computer, create a *LabAdmin* account with the same password and administrator privileges and follow the steps from 1 to 3.
+
+## Module installation
+Install [WindowsLab](https://www.powershellgallery.com/packages/WindowsLab/0.9.0) module on the *Admin computer* from PowerShell Gallery.
+
+1. Log in to *LabAdmin* account
+2. `PS> Install-Module -Name WindowsLab`
+3. Close and reopen the terminal and launch `get-command -Module WindowsLab`
 4. Follow instructions to set `config.json`
 
-Close and reopen the terminal again. Then, launch `get-command -Module WinLabAdmin`. If the module has been installed correctly, you should see the list of cmdlets.
+Close and reopen the terminal again. Then, launch `get-command -Module WindowsLab`. If the module has been installed correctly, you should see the list of cmdlets available in the module.
 
 ## List of cmdlets
 
