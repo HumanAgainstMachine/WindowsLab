@@ -106,35 +106,6 @@ function Start-LabComputer {
 
 }
 
-function Restart-LabComputer {
-    <#
-    .SYNOPSIS
-        Force an immediate restart of each computer and wait for them to be on again
-
-    .EXAMPLE
-        Restart-LabComputer
-
-    .NOTES
-    #>
-    [CmdletBinding(SupportsShouldProcess)]
-    param()
-    Restart-Computer -ComputerName $labComputerList -Force
-}
-
-function Stop-LabComputer {
-    <#
-    .SYNOPSIS
-        Force an immediate shut down of each computer
-
-    .EXAMPLE
-        Stop-LabComputer
-
-    .NOTES
-    #>
-    [CmdletBinding(SupportsShouldProcess)]
-    param()
-    Stop-Computer -ComputerName $labComputerList -Force
-}
 
 function Disconnect-AnyUser {
     <#
@@ -560,6 +531,82 @@ function Restore-LabComputerDesktop {
         }
     }
 }
+
+# -- Stop LabComputer section --
+
+function Stop-LabComputer {
+    <#
+    .SYNOPSIS
+        Force an immediate shut down of each computer
+
+    .EXAMPLE
+        Stop-LabComputer
+
+    .NOTES
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [switch]$When, # Get scheduled LabComputers daily stops
+        [string]$DailyAt # Schedule a new Lab Computer daily stop
+    )
+
+    if ($When.IsPresent) {
+        Get-LabComputerStop
+    } else {
+        # Defaul behavior
+        Stop-Computer -ComputerName $labComputerList -Force
+    }
+}
+
+function Restart-LabComputer {
+    <#
+    .SYNOPSIS
+        Force an immediate restart of each computer and wait for them to be on again
+
+    .EXAMPLE
+        Restart-LabComputer
+
+    .NOTES
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+    Restart-Computer -ComputerName $labComputerList -Force
+}
+
+function Stop-LabComputer {
+    <#
+    .SYNOPSIS
+        Force an immediate shut down of each computer
+
+    .EXAMPLE
+        Stop-LabComputer
+
+    .NOTES
+    #>    
+    [CmdletBinding(DefaultParameterSetName = 'Set0', SupportsShouldProcess = $true)]
+    param (
+        [Parameter(ParameterSetName = 'Set1')]
+        [switch]$When, # Get scheduled LabComputers daily stops
+
+        [Parameter(ParameterSetName = 'Set2')]
+        [string]$DailyAt, # Schedule a new LabComputer daily stop
+
+        [Parameter(ParameterSetName = 'Set3')]
+        [string]$NoMoreAt, # Remove a Labcomputer daily stop
+
+        [Parameter(ParameterSetName = 'Set4')]
+        [switch]$AndRestart # Restart LabComputers
+    )
+
+    switch ($PSCmdlet.ParameterSetName) {
+        'Set0' {Stop-Computer -ComputerName $labComputerList -Force} # no parameter provided
+        'Set1' {Get-LabComputerStop} # -When provided
+        'Set2' {New-LabComputerStop -DailyTime $DailyAt} # -DailyAt provided
+        'Set3' {Remove-LabComputerStop -DailyTime $NoMoreAt} # -NoMoreAt provided
+        'Set4' {Restart-LabComputer} # -AndRestart provided
+    }
+}
+
 
 function New-LabComputerStop {
     <#
