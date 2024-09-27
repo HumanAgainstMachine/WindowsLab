@@ -275,7 +275,8 @@ function New-LabUser {
     [CmdletBinding(SupportsShouldProcess)]
     param (
       [Parameter(Mandatory=$True, HelpMessage="Enter username for Lab User")]
-      [string]$UserName
+      [string]$UserName,
+      [switch]$RestoreDesktop
     )
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
@@ -367,64 +368,73 @@ function Set-LabUser {
 
         Windows Groups description: https://ss64.com/nt/syntax-security_groups.html
     #>
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding(DefaultParameterSetName = 'Set0', SupportsShouldProcess = $True)]
     param (
         [Parameter(Mandatory=$True, HelpMessage="Enter the username for Lab User")]
         [string]$UserName,
         [switch]$SetPassword,
         [validateSet('StandardUser', 'Administrator')]
-        [string]$AccountType
+        [string]$AccountType,
+        [Parameter(ParameterSetName = 'Set1')]
+        [switch]$BackupDesktop,
+        [Parameter(ParameterSetName = 'Set2')]
+        [switch]$RestoreDesktop
     )
 
-    $password = $null
-    if ($SetPassword.IsPresent) {
-        # Prompt and read new password
-        $password = Read-Host -Prompt 'Enter the new password' -AsSecureString
-    }
-    Invoke-Command -ComputerName $labComputerList  -ScriptBlock {
-        try {
-            if ($Using:SetPassword.IsPresent) {
-                # change password
-                Set-LocalUser -Name $Using:UserName -Password $Using:Password -PasswordNeverExpires $True `
-                -UserMayChangePassword $False -ErrorAction Stop
-                Write-Host "$Using:UserName on $env:computername password changed" -ForegroundColor Green
-            }
-            if ($Using:AccountType -eq 'Administrator') {
-                # change to an Administrator
-                Add-LocalGroupMember -Group "Administrators" -Member $Using:UserName -ErrorAction Stop
-                Write-Host "$Using:UserName on $env:computername is now an Administrator" -ForegroundColor Green
-            }
-            if ($Using:AccountType -eq 'StandardUser') {
-                # change to a Standard User
-                Remove-LocalGroupMember -Group "Administrators" -Member $Using:UserName -ErrorAction Stop
-                Write-Host "$Using:UserName on $env:computername is now a Standard User" -ForegroundColor Green
-            }
+    switch ($PSCmdlet.ParameterSetName) {
+        'Set0' {$password = $null
+                if ($SetPassword.IsPresent) {
+                    # Prompt and read new password
+                    $password = Read-Host -Prompt 'Enter the new password' -AsSecureString
+                }
+                Invoke-Command -ComputerName $labComputerList  -ScriptBlock {
+                    try {
+                        if ($Using:SetPassword.IsPresent) {
+                            # change password
+                            Set-LocalUser -Name $Using:UserName -Password $Using:Password -PasswordNeverExpires $True `
+                            -UserMayChangePassword $False -ErrorAction Stop
+                            Write-Host "$Using:UserName on $env:computername password changed" -ForegroundColor Green
+                        }
+                        if ($Using:AccountType -eq 'Administrator') {
+                            # change to an Administrator
+                            Add-LocalGroupMember -Group "Administrators" -Member $Using:UserName -ErrorAction Stop
+                            Write-Host "$Using:UserName on $env:computername is now an Administrator" -ForegroundColor Green
+                        }
+                        if ($Using:AccountType -eq 'StandardUser') {
+                            # change to a Standard User
+                            Remove-LocalGroupMember -Group "Administrators" -Member $Using:UserName -ErrorAction Stop
+                            Write-Host "$Using:UserName on $env:computername is now a Standard User" -ForegroundColor Green
+                        }
+                    }
+                    catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
+                        Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
+                    }
+                    catch [Microsoft.PowerShell.Commands.MemberExistsException] {
+                        Write-Host "$Using:UserName on $env:computername is already an Administrator" -ForegroundColor Yellow
+                    }
+                    catch [Microsoft.PowerShell.Commands.MemberNotFoundException] {
+                        Write-Host "$Using:UserName on $env:computername is already a Standard User" -ForegroundColor Yellow
+                    }
+                    catch {
+                        $_.exception.GetType().fullname
+                    }
+                }            
         }
-        catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-            Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
-        }
-        catch [Microsoft.PowerShell.Commands.MemberExistsException] {
-            Write-Host "$Using:UserName on $env:computername is already an Administrator" -ForegroundColor Yellow
-        }
-        catch [Microsoft.PowerShell.Commands.MemberNotFoundException] {
-            Write-Host "$Using:UserName on $env:computername is already a Standard User" -ForegroundColor Yellow
-        }
-        catch {
-            $_.exception.GetType().fullname
-        }
+        'Set1' {Backup-LabUserDesktop -UserName $UserName} # -BackupDesktop provided
+        'Set2' {Restore-LabUserDesktop -UserName $UserName} # -RestoreDesktop provided
     }
 }
 
-function Save-LabComputerDesktop {
+function Backup-LabUserDesktop {
     <#
     .SYNOPSIS
-        Save a copy of Lab user desktop folder into the Lab computer root
+        Back up LabUser desktop into ROOT:\LabComputer folder
 
     .DESCRIPTION
-        This cmdlet copies the Lab user desktop folder into into ROOT/LabComputer folder and deletes any previous item.
+        This cmdlet copies LabUser desktop files and folders into into ROOT:|LabComputer folder and deletes any previous item.
 
     .EXAMPLE
-        Save-LabComputerDesktop -UserName Alunno
+        Backup-LabUserDesktop -UserName Alunno
     #>
     [CmdletBinding()]
     param(
@@ -438,7 +448,7 @@ function Save-LabComputerDesktop {
 
             # get Lab user USERPROFILE path
             $userProfilePath = (Get-CimInstance -Class Win32_UserProfile | Where-Object { $_.SID -eq $localUser.SID.Value }).LocalPath
-            Test-Path -Path $userProfilePath -ErrorAction Stop | Out-Null
+            # Test-Path -Path $userProfilePath -ErrorAction Stop | Out-Null
 
             $userDesktopPath = Join-Path -Path $userprofilePath -ChildPath 'Desktop'
 
@@ -446,10 +456,9 @@ function Save-LabComputerDesktop {
             $labComputerPath = Join-Path -Path $env:SystemDrive -ChildPath 'LabComputer'
             New-Item -Path $labComputerPath -ItemType "directory" -ErrorAction SilentlyContinue
 
-            # copy lab user desktop
-            $destinationPath = Join-Path -Path $labComputerPath -ChildPath "$Using:UserName-Desktop"
-            Remove-Item -Path $destinationPath -Force -Recurse -ErrorAction SilentlyContinue # delete previous saved desktop if any
-            Copy-Item -Path "$userDesktopPath\" -Destination $destinationPath -Recurse -Force
+            # copy labuser desktop
+            Remove-Item -Path $labComputerPath -Force -Recurse -ErrorAction SilentlyContinue # delete any previous saved desktop
+            Copy-Item -Path "$userDesktopPath\" -Destination $labComputerPath -Recurse -Force
 
             Write-Host "$Using:Username Desktop saved for $env:computername" -ForegroundColor Green
         }
@@ -465,16 +474,16 @@ function Save-LabComputerDesktop {
     }
 }
 
-function Restore-LabComputerDesktop {
+function Restore-LabUserDesktop {
     <#
     .SYNOPSIS
-        Restore the copy of Lab user desktop folder from the Lab computer root
+        Restore LabUser desktop backup from ROOT:\LabComputer 
 
     .DESCRIPTION
-        This cmdlet copies back the Lab user desktop folder from into ROOT/LabComputer folder, overwrite any existing items.
+        This cmdlet copies back the LabUser desktop backup from ROOT:\LabComputer folder, overwrite any existing items.
 
     .EXAMPLE
-        Restore-LabComputerDesktop -UserName Alunno
+        Restore-LabUserDesktop -UserName Alunno
     #>
     [CmdletBinding()]
     param(
@@ -493,7 +502,7 @@ function Restore-LabComputerDesktop {
             $userDesktopPath = Join-Path -Path $userprofilePath -ChildPath 'Desktop'
 
             # copy lab user desktop back
-            $sourcePath = Join-Path -Path $env:SystemDrive -ChildPath "LabComputer" | Join-Path -ChildPath "$using:UserName-Desktop"
+            $sourcePath = Join-Path -Path $env:SystemDrive -ChildPath "LabComputer"
             Copy-Item -Path "$sourcePath\*" -Destination $userDesktopPath -Recurse -Force
 
             Write-Host "$Using:Username Desktop restored for $env:computername" -ForegroundColor Green

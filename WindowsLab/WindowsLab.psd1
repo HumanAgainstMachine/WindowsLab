@@ -73,7 +73,7 @@ RequiredModules = @(@{ModuleName="NtpTime"; ModuleVersion="1.1"; Guid="7fb3dc99-
 FunctionsToExport = @('Stop-LabComputer', 'Start-LabComputer', 
                     'Show-config', 'Sync-LabComputerDate', 'Test-LabComputerPrompt', 
                     'Disconnect-AnyUser', 'New-LabUser', 'Remove-LabUser', 
-                    'Set-LabUser', 'Restore-LabComputerDesktop', 'Save-LabComputerDesktop')
+                    'Set-LabUser')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()
