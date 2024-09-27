@@ -81,29 +81,132 @@ function Show-Config {
 }
 
 
-function Start-LabComputer {
+function Test-LabComputerPrompt {
     <#
     .SYNOPSIS
-        Turn on each computers if WoL setting is present and enabled in BIOS/UEFI
+        Tests for each Lab computer if the WinRM service is running.
+
+    .DESCRIPTION
+        This cmdlet informs you which Lab computers are ready to accept cmdlets from Main computer.
 
     .EXAMPLE
-        Start-LabComputer
+        Test-LabComputerPrompt
+    #>
+    [CmdletBinding()]
+    param ()
+
+    foreach ($pc in $labComputerList) {
+        try {
+            Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
+            Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
+            Write-Host "ready" -ForegroundColor Green
+        }
+        catch [System.InvalidOperationException] {
+            Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
+            Write-Host "not ready" -ForegroundColor Red
+        }
+    }
+}
+
+function Sync-LabComputerDate {
+    <#
+    .SYNOPSIS
+        Sync the date with the NTP time for each computer.
+
+        .EXAMPLE
+        Sync-LabComputerDate
 
     .NOTES
-        https://www.pdq.com/blog/wake-on-lan-wol-magic-packet-powershell/
+        The NtpTime module is required on MasterComputer (https://www.powershellgallery.com/packages/NtpTime/1.1)
+
+        Set-Date requires admin privilege to run
     #>
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding()]
     param ()
-    # send Magic Packet over LAN
-    foreach ($Mac in $macs) {
-        $MacByteArray = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
-        [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
-        $UdpClient = New-Object System.Net.Sockets.UdpClient
-        $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
-        $UdpClient.Send($MagicPacket,$MagicPacket.Length)
-        $UdpClient.Close()
+    # check if NtpTime module is installed
+    if ($null -eq (Get-Module -ListAvailable -Name NtpTime)) {
+        Write-Host "`nNtpTime Module missing. Install the module with:" -ForegroundColor Yellow
+        Write-Host "    Install-Module -Name NtpTime`n"
+        Break
     }
 
+    # get datetime from default NTP server
+    try {
+        $currentDate = (Get-NtpTime -MaxOffset 60000).NtpTime
+        Write-Host "`n(NTP time: $currentdate)`n" -ForegroundColor Yellow
+
+        Set-Date -Date $currentDate | Out-Null
+        Write-Host "MasterComputer synchronized" -ForegroundColor Green
+        Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+            Set-Date -Date $Using:currentDate | Out-Null
+            Write-Host "$env:computername synchronized" -ForegroundColor Green
+        }
+    }
+    catch {
+        Write-Host "`nTry again later ..." -ForegroundColor Yellow
+    }
+}
+
+function Copy-ToLabUserDesktop {
+    <#
+    .SYNOPSIS
+        Copy a file or folder from one location to LabUser Desktop
+
+    .DESCRIPTION
+        Copy a file or folder from one location to LabUser Desktop, folders are copied recursively.
+        This cmdlet can copy over a read-only file or alias.
+
+    .EXAMPLE
+        Copy-ToLabUserDesktop -Path filename.txt -UserName Alunno
+
+        Copy-ToLabUserDesktop -Path C:\Logfiles -UserName Concorso
+
+    .NOTES
+        Inspiration: https://lazyadmin.nl/powershell/copy-file/#copy-file-to-remote-computer-with-powershell
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$True, HelpMessage="Enter Path to file or folder")]
+        [string]$Path,
+        [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
+        [string]$UserName
+    )
+
+    Write-Host "Start copying to LabUser Desktops ..." -ForegroundColor Yellow
+
+    foreach ($computerName in $labComputerList) {
+        $session = New-PSSession -ComputerName $computerName
+
+            $userprofile = Invoke-Command -Session $session -ScriptBlock {
+                try {
+                    $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
+
+                    # Get %USERPROFILE% path
+                    $userprofile = (Get-CimInstance -Class Win32_UserProfile | Where-Object { $_.SID -eq $localUser.SID.Value }).LocalPath
+                    if ($null -eq $userprofile) {
+                        Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
+                        Write-Host "Copy to $env:computername failed" -ForegroundColor Red
+                        $userprofile = ""
+                    }
+                }
+                catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
+                    Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
+                    Write-Host "Copy to $env:computername failed" -ForegroundColor Red
+                    $userprofile = $null
+                }
+                finally {
+                    Write-Output $userprofile
+                }
+
+            }
+            if ($userprofile -ne "" -and $null -ne $userprofile) {
+                $desktopPath = Join-Path -Path $userprofile -ChildPath 'Desktop'
+                Copy-Item -Path $path -Destination $desktopPath -ToSession $session -Recurse -Force
+                Write-host "copy to $computerName success" -ForegroundColor Green
+            }
+
+        Remove-PSSession -Session $session
+    }
 }
 
 
@@ -148,6 +251,8 @@ function Disconnect-AnyUser {
         }
     }
 }
+
+# -- LabUser section --
 
 function New-LabUser {
     <#
@@ -310,134 +415,6 @@ function Set-LabUser {
     }
 }
 
-function Sync-LabComputerDate {
-    <#
-    .SYNOPSIS
-        Sync the date with the NTP time for each computer.
-
-        .EXAMPLE
-        Sync-LabComputerDate
-
-    .NOTES
-        The NtpTime module is required on MasterComputer (https://www.powershellgallery.com/packages/NtpTime/1.1)
-
-        Set-Date requires admin privilege to run
-    #>
-    [CmdletBinding()]
-    param ()
-    # check if NtpTime module is installed
-    if ($null -eq (Get-Module -ListAvailable -Name NtpTime)) {
-        Write-Host "`nNtpTime Module missing. Install the module with:" -ForegroundColor Yellow
-        Write-Host "    Install-Module -Name NtpTime`n"
-        Break
-    }
-
-    # get datetime from default NTP server
-    try {
-        $currentDate = (Get-NtpTime -MaxOffset 60000).NtpTime
-        Write-Host "`n(NTP time: $currentdate)`n" -ForegroundColor Yellow
-
-        Set-Date -Date $currentDate | Out-Null
-        Write-Host "MasterComputer synchronized" -ForegroundColor Green
-        Invoke-Command -ComputerName $labComputerList -ScriptBlock {
-            Set-Date -Date $Using:currentDate | Out-Null
-            Write-Host "$env:computername synchronized" -ForegroundColor Green
-        }
-    }
-    catch {
-        Write-Host "`nTry again later ..." -ForegroundColor Yellow
-    }
-}
-
-function Copy-ToLabUserDesktop {
-    <#
-    .SYNOPSIS
-        Copy a file or folder from one location to LabUser Desktop
-
-    .DESCRIPTION
-        Copy a file or folder from one location to LabUser Desktop, folders are copied recursively.
-        This cmdlet can copy over a read-only file or alias.
-
-    .EXAMPLE
-        Copy-ToLabUserDesktop -Path filename.txt -UserName Alunno
-
-        Copy-ToLabUserDesktop -Path C:\Logfiles -UserName Concorso
-
-    .NOTES
-        Inspiration: https://lazyadmin.nl/powershell/copy-file/#copy-file-to-remote-computer-with-powershell
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory=$True, HelpMessage="Enter Path to file or folder")]
-        [string]$Path,
-        [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
-        [string]$UserName
-    )
-
-    Write-Host "Start copying to LabUser Desktops ..." -ForegroundColor Yellow
-
-    foreach ($computerName in $labComputerList) {
-        $session = New-PSSession -ComputerName $computerName
-
-            $userprofile = Invoke-Command -Session $session -ScriptBlock {
-                try {
-                    $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
-
-                    # Get %USERPROFILE% path
-                    $userprofile = (Get-CimInstance -Class Win32_UserProfile | Where-Object { $_.SID -eq $localUser.SID.Value }).LocalPath
-                    if ($null -eq $userprofile) {
-                        Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
-                        Write-Host "Copy to $env:computername failed" -ForegroundColor Red
-                        $userprofile = ""
-                    }
-                }
-                catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-                    Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
-                    Write-Host "Copy to $env:computername failed" -ForegroundColor Red
-                    $userprofile = $null
-                }
-                finally {
-                    Write-Output $userprofile
-                }
-
-            }
-            if ($userprofile -ne "" -and $null -ne $userprofile) {
-                $desktopPath = Join-Path -Path $userprofile -ChildPath 'Desktop'
-                Copy-Item -Path $path -Destination $desktopPath -ToSession $session -Recurse -Force
-                Write-host "copy to $computerName success" -ForegroundColor Green
-            }
-
-        Remove-PSSession -Session $session
-    }
-}
-
-function Test-LabComputerPrompt {
-    <#
-    .SYNOPSIS
-        Tests for each Lab computer if the WinRM service is running.
-
-    .DESCRIPTION
-        This cmdlet informs you which Lab computers are ready to accept cmdlets from Main computer.
-
-    .EXAMPLE
-        Test-LabComputerPrompt
-    #>
-    [CmdletBinding()]
-    param ()
-
-    foreach ($pc in $labComputerList) {
-        try {
-            Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
-            Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
-            Write-Host "ready" -ForegroundColor Green
-        }
-        catch [System.InvalidOperationException] {
-            Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
-            Write-Host "not ready" -ForegroundColor Red
-        }
-    }
-}
-
 function Save-LabComputerDesktop {
     <#
     .SYNOPSIS
@@ -532,45 +509,32 @@ function Restore-LabComputerDesktop {
     }
 }
 
-# -- Stop LabComputer section --
 
-function Stop-LabComputer {
+# -- LabComputer section --
+
+function Start-LabComputer {
     <#
     .SYNOPSIS
-        Force an immediate shut down of each computer
+        Turn on each computers if WoL setting is present and enabled in BIOS/UEFI
 
     .EXAMPLE
-        Stop-LabComputer
+        Start-LabComputer
 
     .NOTES
+        https://www.pdq.com/blog/wake-on-lan-wol-magic-packet-powershell/
     #>
     [CmdletBinding(SupportsShouldProcess)]
-    param(
-        [switch]$When, # Get scheduled LabComputers daily stops
-        [string]$DailyAt # Schedule a new Lab Computer daily stop
-    )
-
-    if ($When.IsPresent) {
-        Get-LabComputerStop
-    } else {
-        # Defaul behavior
-        Stop-Computer -ComputerName $labComputerList -Force
+    param ()
+    # send Magic Packet over LAN
+    foreach ($Mac in $macs) {
+        $MacByteArray = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
+        [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
+        $UdpClient = New-Object System.Net.Sockets.UdpClient
+        $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
+        $UdpClient.Send($MagicPacket,$MagicPacket.Length)
+        $UdpClient.Close()
     }
-}
 
-function Restart-LabComputer {
-    <#
-    .SYNOPSIS
-        Force an immediate restart of each computer and wait for them to be on again
-
-    .EXAMPLE
-        Restart-LabComputer
-
-    .NOTES
-    #>
-    [CmdletBinding(SupportsShouldProcess)]
-    param()
-    Restart-Computer -ComputerName $labComputerList -Force
 }
 
 function Stop-LabComputer {
@@ -605,6 +569,21 @@ function Stop-LabComputer {
         'Set3' {Remove-LabComputerStop -DailyTime $NoMoreAt} # -NoMoreAt provided
         'Set4' {Restart-LabComputer} # -AndRestart provided
     }
+}
+
+function Restart-LabComputer {
+    <#
+    .SYNOPSIS
+        Force an immediate restart of each computer and wait for them to be on again
+
+    .EXAMPLE
+        Restart-LabComputer
+
+    .NOTES
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+    Restart-Computer -ComputerName $labComputerList -Force
 }
 
 
