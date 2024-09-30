@@ -163,119 +163,43 @@ function Deploy-Item {
         [string]$UserName        
     )
 
-    # LabComputer check on admin computer
-    # $labComputerPath = Join-Path -Path $env:SystemDrive -ChildPath 'LabComputer'
-    # if (-not (Test-Path -Path $labComputerPath -PathType Container)) {
-    #     New-Item -Path $labComputerPath -ItemType "directory"
-    # } 
+    Resolve-Path -Path $Path -ErrorAction Stop | Out-Null
 
-    Write-Host "Start deploying ..." -ForegroundColor Yellow
+    $labComputerList | ForEach-Object -Parallel {
+        $session = New-PSSession -ComputerName $_
+        $labUserprofilePath = Invoke-Command -Session $session -ScriptBlock {
+            param($UName)
+            try {
+                # LabUser exist?
+                $labUser = Get-LocalUser -Name $UName -ErrorAction Stop
 
-    $sessions = New-PSSession -ComputerName $labComputerList
+                # LabUser signed-in?
+                $labUserProfilePath = (Get-CimInstance -Class Win32_UserProfile | 
+                                    Where-Object { $_.SID -eq $labUser.SID.Value }).LocalPath
 
-    Invoke-Command -Session $sessions -ScriptBlock {
-        try {
-
-            # LabUser exist?
-            $labUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
-
-            # LabUser signed -in first time?
-            $labUserProfilePath = (Get-CimInstance -Class Win32_UserProfile | 
-                                   Where-Object { $_.SID -eq $labUser.SID.Value }).LocalPath
-            if ($null -ne $labUserProfilePath) {
-
-                # get session
-                $session = $PSSenderInfo.ConnectionInfo.Session
-
-                if ($null -eq $session) {Write-Host 'NUUUULL'}
-
-                $desktopPath = Join-Path -Path $labUserProfilePath -ChildPath 'Desktop'
-                $FileName = Split-Path -Path $Using:Path -Leaf
-                write-host 'Admin Item Path: ', $Using:Path
-
-                $destinationPath = Join-Path -Path $desktopPath -ChildPath $FileName 
-                write-host 'DestinationPath: ', $destinationPath
-                Copy-Item -Path $Using:Path -Destination $destinationPath -FromSession $session -Recurse -Force
-                Write-host "Deployment to $env:computerName success" -ForegroundColor Green
-
-            } else {
-                Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
-                Write-Host "Deployment to $env:computername failed" -ForegroundColor Red                
+                if ($null -eq $labUserProfilePath) {
+                    Write-Host "$UName exist but never signed-in on $env:computername" -ForegroundColor Yellow
+                    Write-Host "Deployment to $env:computername failed" -ForegroundColor Red
+                }                
             }
+            catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
+                Write-Host "$UName NOT exist on $env:computername" -ForegroundColor Yellow
+                Write-Host "Deployment to $env:computername failed" -ForegroundColor Red
+                $labUserProfilePath = $null
+            }
+            finally {
+                $labUserProfilePath
+            }
+        } -ArgumentList $using:UserName
+
+        if ($null -ne $labUserprofilePath) {
+            $labUserDesktopPath = Join-Path -Path $labUserprofilePath -ChildPath 'Desktop'
+            Copy-Item -Path $using:Path -Destination $labUserDesktopPath -ToSession $session -Recurse -Force
+            Write-Host "Deployment to $_ success" -ForegroundColor Green
         }
-        catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-            Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
-            Write-Host "Copy to $env:computername failed" -ForegroundColor Red
-        }
-        catch {
-            $_.exception.GetType().fullname
-        }
-    }
-    
+        Remove-PSSession $session
+    } -ThrottleLimit 5
 }
-
-function Copy-ToLabUserDesktop {
-    <#
-    .SYNOPSIS
-        Copy a file or folder from one location to LabUser Desktop
-
-    .DESCRIPTION
-        Copy a file or folder from one location to LabUser Desktop, folders are copied recursively.
-        This cmdlet can copy over a read-only file or alias.
-
-    .EXAMPLE
-        Copy-ToLabUserDesktop -Path filename.txt -UserName Alunno
-
-        Copy-ToLabUserDesktop -Path C:\Logfiles -UserName Concorso
-
-    .NOTES
-        Inspiration: https://lazyadmin.nl/powershell/copy-file/#copy-file-to-remote-computer-with-powershell
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory=$True, HelpMessage="Enter Path to file or folder")]
-        [string]$Path,
-        [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
-        [string]$UserName
-    )
-
-    Write-Host "Start copying to LabUser Desktops ..." -ForegroundColor Yellow
-
-    foreach ($computerName in $labComputerList) {
-        $session = New-PSSession -ComputerName $computerName
-
-            $userprofile = Invoke-Command -Session $session -ScriptBlock {
-                try {
-                    $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
-
-                    # Get %USERPROFILE% path
-                    $userprofile = (Get-CimInstance -Class Win32_UserProfile | Where-Object { $_.SID -eq $localUser.SID.Value }).LocalPath
-                    if ($null -eq $userprofile) {
-                        Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
-                        Write-Host "Copy to $env:computername failed" -ForegroundColor Red
-                        $userprofile = ""
-                    }
-                }
-                catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-                    Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
-                    Write-Host "Copy to $env:computername failed" -ForegroundColor Red
-                    $userprofile = $null
-                }
-                finally {
-                    Write-Output $userprofile
-                }
-
-            }
-            if ($userprofile -ne "" -and $null -ne $userprofile) {
-                $desktopPath = Join-Path -Path $userprofile -ChildPath 'Desktop'
-                Copy-Item -Path $path -Destination $desktopPath -ToSession $session -Recurse -Force
-                Write-host "copy to $computerName success" -ForegroundColor Green
-            }
-
-        Remove-PSSession -Session $session
-    }
-}
-
 
 function Disconnect-AnyUser {
     <#
