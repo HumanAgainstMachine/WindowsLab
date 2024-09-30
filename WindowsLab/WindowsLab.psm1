@@ -147,6 +147,73 @@ function Sync-LabComputerDate {
     }
 }
 
+function Deploy-Item {
+    <#
+    .SYNOPSIS
+        Deploy a file or folder from Admin computer to Lab computers
+    
+    .DESCRIPTION
+        Copy a file or folder to all LabUser desktops, folders are copied recursively.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$True, HelpMessage="Enter Path to file or folder")]
+        [string]$Path,
+        [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
+        [string]$UserName        
+    )
+
+    # LabComputer check on admin computer
+    # $labComputerPath = Join-Path -Path $env:SystemDrive -ChildPath 'LabComputer'
+    # if (-not (Test-Path -Path $labComputerPath -PathType Container)) {
+    #     New-Item -Path $labComputerPath -ItemType "directory"
+    # } 
+
+    Write-Host "Start deploying ..." -ForegroundColor Yellow
+
+    $sessions = New-PSSession -ComputerName $labComputerList
+
+    Invoke-Command -Session $sessions -ScriptBlock {
+        try {
+
+            # LabUser exist?
+            $labUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
+
+            # LabUser signed -in first time?
+            $labUserProfilePath = (Get-CimInstance -Class Win32_UserProfile | 
+                                   Where-Object { $_.SID -eq $labUser.SID.Value }).LocalPath
+            if ($null -ne $labUserProfilePath) {
+
+                # get session
+                $session = $PSSenderInfo.ConnectionInfo.Session
+
+                if ($null -eq $session) {Write-Host 'NUUUULL'}
+
+                $desktopPath = Join-Path -Path $labUserProfilePath -ChildPath 'Desktop'
+                $FileName = Split-Path -Path $Using:Path -Leaf
+                write-host 'Admin Item Path: ', $Using:Path
+
+                $destinationPath = Join-Path -Path $desktopPath -ChildPath $FileName 
+                write-host 'DestinationPath: ', $destinationPath
+                Copy-Item -Path $Using:Path -Destination $destinationPath -FromSession $session -Recurse -Force
+                Write-host "Deployment to $env:computerName success" -ForegroundColor Green
+
+            } else {
+                Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
+                Write-Host "Deployment to $env:computername failed" -ForegroundColor Red                
+            }
+        }
+        catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
+            Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
+            Write-Host "Copy to $env:computername failed" -ForegroundColor Red
+        }
+        catch {
+            $_.exception.GetType().fullname
+        }
+    }
+    
+}
+
 function Copy-ToLabUserDesktop {
     <#
     .SYNOPSIS
@@ -275,8 +342,7 @@ function New-LabUser {
     [CmdletBinding(SupportsShouldProcess)]
     param (
       [Parameter(Mandatory=$True, HelpMessage="Enter username for Lab User")]
-      [string]$UserName,
-      [switch]$RestoreDesktop
+      [string]$UserName
     )
 
     Invoke-Command -ComputerName $labComputerList -ScriptBlock {
