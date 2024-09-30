@@ -1,9 +1,16 @@
+# Define a list of computer names
+$computerNames = @("LENO", "CUBO")
 
-# Read the content of a binary file into a byte array
-$filePath = "C:\Users\Admin\Desktop\CV.odt"
-$fileContent = [System.IO.File]::ReadAllBytes($filePath)
+# Create sessions for each computer
+$sessions = New-PSSession -ComputerName $computerNames
 
-# Now $fileContent holds the binary content of the file
+# Run the command on each session and pass session details
+Invoke-Command -Session $sessions -ScriptBlock {
+    "Connected to: $env:COMPUTERNAME"
+    "Connected User: $($PSSenderInfo.ConnectedUser)"
+    "Client Machine: $($PSSenderInfo.ClientMachine)"
+    $PSSenderInfo | Get-Member
+}
 
-[System.IO.File]::WriteAllBytes("C:\Users\Admin\Desktop\mamt.odt", $filecontent) 
-
+# Clean up sessions after use
+Remove-PSSession $sessions
