@@ -201,13 +201,13 @@ function Deploy-Item {
     } -ThrottleLimit 5
 }
 
-function Disconnect-AnyUser {
+function Disconnect-User {
     <#
     .SYNOPSIS
         Disconnect any connected user from each Lab computer
 
     .EXAMPLE
-        Disconnect-AnyUser
+        Disconnect-User
 
     .NOTES
         Windows Home edition doesn't include query.exe (https://superuser.com/a/1646775)
