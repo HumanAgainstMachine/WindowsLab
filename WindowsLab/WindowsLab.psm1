@@ -14,8 +14,8 @@ if (Test-Path -Path $configPath -PathType Leaf) {
     # read config file
     $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
 
-    $labComputerList = $config.labComputerList
-    $macs = $config.macs
+    $labComputerNames = $config.labComputerNames
+    $labComputerMACs = $config.labComputerMACs
 } else {
     $t = "
 ===========================================
@@ -54,10 +54,10 @@ function Show-Config {
     Write-Host $t.Trim() -ForegroundColor DarkYellow
 
     Write-Host 'Lab Computer: ' -NoNewline
-    Write-Host $labComputerList -Separator ', '
+    Write-Host $labComputerNames -Separator ', '
 
     Write-Host 'Mac Addresses  : ' -NoNewline
-    Write-Host $macs -Separator ', '
+    Write-Host $labComputerMACs -Separator ', '
 
     $t = "
 ===========================
@@ -67,7 +67,7 @@ function Show-Config {
 
     Write-Host $t.Trim() -ForegroundColor DarkYellow
     Write-Host 'Trying to find Mac Addresses ...'
-    foreach ($pc in $labComputerList) {
+    foreach ($pc in $labComputerNames) {
         $macAddress = Get-NetAdapter -CimSession $PC | Where-Object {$_.Status -eq 'Up'} | Select-Object MacAddress
 
         Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
@@ -95,7 +95,7 @@ function Test-LabComputerPrompt {
     [CmdletBinding()]
     param ()
 
-    foreach ($pc in $labComputerList) {
+    foreach ($pc in $labComputerNames) {
         try {
             Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
             Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
@@ -137,7 +137,7 @@ function Sync-LabComputerDate {
 
         Set-Date -Date $currentDate | Out-Null
         Write-Host "MasterComputer synchronized" -ForegroundColor Green
-        Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+        Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
             Set-Date -Date $Using:currentDate | Out-Null
             Write-Host "$env:computername synchronized" -ForegroundColor Green
         }
@@ -165,7 +165,7 @@ function Deploy-Item {
 
     Resolve-Path -Path $Path -ErrorAction Stop | Out-Null
 
-    $labComputerList | ForEach-Object -Parallel {
+    $labComputerNames | ForEach-Object -Parallel {
         $session = New-PSSession -ComputerName $_
         $labUserprofilePath = Invoke-Command -Session $session -ScriptBlock {
             param($UName)
@@ -219,7 +219,7 @@ function Disconnect-User {
     [CmdletBinding()]
     param()
 
-    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope
         try {
             # check if quser command exist
@@ -269,7 +269,7 @@ function New-LabUser {
       [string]$UserName
     )
 
-    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
         try {
             $blankPassword = [securestring]::new()
             New-LocalUser -Name $Using:UserName -Password $blankPassword -PasswordNeverExpires `
@@ -305,7 +305,7 @@ function Remove-LabUser {
       [string]$UserName
     )
 
-    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
         try {
             # check if quser command exist
             Get-Command -Name quser -ErrorAction Stop | Out-Null
@@ -377,7 +377,7 @@ function Set-LabUser {
                     # Prompt and read new password
                     $password = Read-Host -Prompt 'Enter the new password' -AsSecureString
                 }
-                Invoke-Command -ComputerName $labComputerList  -ScriptBlock {
+                Invoke-Command -ComputerName $labComputerNames  -ScriptBlock {
                     try {
                         if ($Using:SetPassword.IsPresent) {
                             # change password
@@ -431,7 +431,7 @@ function Backup-LabUserDesktop {
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName
     )
-    invoke-Command -ComputerName $labComputerList -ScriptBlock {
+    invoke-Command -ComputerName $labComputerNames -ScriptBlock {
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -480,7 +480,7 @@ function Restore-LabUserDesktop {
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName
     )
-    invoke-Command -ComputerName $labComputerList -ScriptBlock {
+    invoke-Command -ComputerName $labComputerNames -ScriptBlock {
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -511,6 +511,51 @@ function Restore-LabUserDesktop {
 
 # -- LabComputer section --
 
+function Get-LabComputerMac {
+    <#
+    .SYNOPSIS
+        Search for ethernet ComputerLab Mac addresses
+    
+    .DESCRIPTION
+        Search Ethernet (wired LAN) MAC addresses for later use with WoL in Start-LabComputer cmdlet, return null or the array of macs
+    #>
+
+    $MACs = @()
+    $labComputerNames | ForEach-Object {
+        try {
+            Write-Host "$_ " -ForegroundColor DarkYellow -NoNewline
+            # search for Physical, connected (Up), ethernet (standard 802.3) adapter
+            $netAdapter = Get-NetAdapter -Physical -CimSession $_ | Where-Object {
+                            $_.Status -eq "Up" -and ($_.PhysicalMediaType -like "*802.3*" -or $_.Name -like "*Ethernet*")
+                        } | Select-Object MacAddress, PhysicalMediaType 
+                        
+            if ($netAdapter.Length -eq 1) {
+                $MACs += $netAdapter.MacAddress
+                Write-Host $netAdapter.MacAddress
+            }
+            else {
+                Write-Host "seams to have multiple ethernet net adapters, disconnect all but one" -NoNewline
+                Write-Host $netAdapter.MacAddress -Separator ', ' 
+            }
+         
+        }
+        catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+            Write-Host "Not reachable " -ForegroundColor Red -NoNewline
+            Write-Host "(is computer on and cable connected?)" -ForegroundColor DarkYellow
+        }
+    }
+
+    if ($MACs.Length -eq $labComputerNames.Length) {
+        Write-Host "Everithing is ok, press key to save MAC addresses"
+        return $MACs
+    }
+    else {
+        Write-Host "MAC addresses will not be saved, correct what's wrong and launch again FIX missing MAC addresses"
+        return $null
+    }
+
+}
+
 function Start-LabComputer {
     <#
     .SYNOPSIS
@@ -524,8 +569,9 @@ function Start-LabComputer {
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param ()
+
     # send Magic Packet over LAN
-    foreach ($Mac in $macs) {
+    foreach ($Mac in $labComputerMACs) {
         $MacByteArray = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
         [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
         $UdpClient = New-Object System.Net.Sockets.UdpClient
@@ -562,7 +608,7 @@ function Stop-LabComputer {
     )
 
     switch ($PSCmdlet.ParameterSetName) {
-        'Set0' {Stop-Computer -ComputerName $labComputerList -Force} # no parameter provided
+        'Set0' {Stop-Computer -ComputerName $labComputerNames -Force} # no parameter provided
         'Set1' {Get-LabComputerStop} # -When provided
         'Set2' {New-LabComputerStop -DailyTime $DailyAt} # -DailyAt provided
         'Set3' {Remove-LabComputerStop -DailyTime $NoMoreAt} # -NoMoreAt provided
@@ -582,7 +628,7 @@ function Restart-LabComputer {
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param()
-    Restart-Computer -ComputerName $labComputerList -Force
+    Restart-Computer -ComputerName $labComputerNames -Force
 }
 
 
@@ -621,7 +667,7 @@ function New-LabComputerStop {
     # Set the action
     $action = New-ScheduledTaskAction -Execute 'Powershell' -Argument '-NoProfile -ExecutionPolicy Bypass -Command "& {Stop-Computer -Force}"'
 
-    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
 
         # Set principal contex for SYSTEM account to run as a service with with the highest privileges
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
@@ -671,7 +717,7 @@ function Get-LabComputerStop {
     [CmdletBinding()]
     param ()
 
-    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
 
         $formattedTime = "`n${env:COMPUTERNAME}:`n  "
         try {
@@ -729,7 +775,7 @@ function Remove-LabComputerStop {
     # Convert $DailyTimeObj to a TimeSpan object
     $dailyStopTime = $dailyTimeObj.TimeOfDay
 
-    Invoke-Command -ComputerName $labComputerList -ScriptBlock {
+    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
 
         try {
             # Get scheduled StopThisComputer task if exist
