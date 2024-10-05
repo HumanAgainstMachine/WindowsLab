@@ -12,7 +12,7 @@
 RootModule = '.\WindowsLab.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.9.0'
+ModuleVersion = '1.0.0'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Core')
@@ -30,7 +30,14 @@ CompanyName = 'Unknown'
 Copyright = '(c) Human.Against.Machine. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'Tools to administer a Windows OS computer lab'
+Description = """**WindowsLab** is a PowerShell module designed to simplify the administration of a computer lab running Windows OS. It provides cmdlets for common tasks such as:
+
+- Starting, restarting, and stopping all computers.
+- Updating date and time on all computers.
+- Creating and removing local accounts.
+- Changing passwords.
+- Disconnecting users.
+- Sending files to all computers at once."""
 
 # Minimum version of the PowerShell engine required by this module
 PowerShellVersion = '7.1'

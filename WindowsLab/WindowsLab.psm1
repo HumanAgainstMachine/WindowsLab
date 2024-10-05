@@ -21,7 +21,7 @@ if (-not (Test-Path -Path $configPath -PathType Leaf)) {
 
 $config = $null # Script (module) scope variable
 
-function Watch-LabPcNames {
+function Watch-LabPcName {
     $script:config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
     
     if ($script:config.labPcNames.Length -eq 0) {
@@ -35,17 +35,17 @@ function Watch-LabPcNames {
 function Test-LabPcPrompt {
     <#
     .SYNOPSIS
-        Tests for each Lab computer if the WinRM service is running.
+        Tests for each LabPC if the WinRM service is running.
 
     .DESCRIPTION
-        This cmdlet informs you which Lab computers are ready to accept cmdlets from Main computer.
+        This cmdlet informs you which LabPCs are ready to accept cmdlets from Main computer.
 
     .EXAMPLE
         Test-LabPcPrompt
     #>
     [CmdletBinding()]
     param ()
-    Watch-LabPcNames
+    Watch-LabPcName
 
     foreach ($pc in $script:config.labPcNames) {
         try {
@@ -75,7 +75,7 @@ function Sync-LabPcDate {
     #>
     [CmdletBinding()]
     param ()
-    Watch-LabPcNames
+    Watch-LabPcName
 
     # check if NtpTime module is installed
     if ($null -eq (Get-Module -ListAvailable -Name NtpTime)) {
@@ -104,7 +104,7 @@ function Sync-LabPcDate {
 function Deploy-Item {
     <#
     .SYNOPSIS
-        Deploy a file or folder from Admin computer to Lab computers
+        Deploy a file or folder from AdminPC to LabPCs
     
     .DESCRIPTION
         Copy a file or folder to all LabUser desktops, folders are copied recursively.
@@ -117,7 +117,7 @@ function Deploy-Item {
         [string]$UserName        
     )
 
-    Watch-LabPcNames
+    Watch-LabPcName
     Resolve-Path -Path $Path -ErrorAction Stop | Out-Null
 
     $script:config.labPcNames | ForEach-Object -Parallel {
@@ -159,7 +159,7 @@ function Deploy-Item {
 function Disconnect-User {
     <#
     .SYNOPSIS
-        Disconnect any connected user from each Lab computer
+        Disconnect any connected user from each LabPC
 
     .EXAMPLE
         Disconnect-User
@@ -174,7 +174,7 @@ function Disconnect-User {
     [CmdletBinding()]
     param()
 
-    Watch-LabPcNames
+    Watch-LabPcName
     Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope
         try {
@@ -225,7 +225,7 @@ function New-LabUser {
       [string]$UserName
     )
 
-    Watch-LabPcNames
+    Watch-LabPcName
     Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         try {
             $blankPassword = [securestring]::new()
@@ -262,7 +262,7 @@ function Remove-LabUser {
       [string]$UserName
     )
 
-    Watch-LabPcNames
+    Watch-LabPcName
     Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         try {
             # check if quser command exist
@@ -329,7 +329,7 @@ function Set-LabUser {
         [switch]$RestoreDesktop
     )
 
-    Watch-LabPcNames
+    Watch-LabPcName
     switch ($PSCmdlet.ParameterSetName) {
         'Set0' {$password = $null
                 if ($SetPassword.IsPresent) {
@@ -480,7 +480,7 @@ function Show-LabPcMac {
         Start-LabPc cmdlet, 
     #>
 
-    Watch-LabPcNames
+    Watch-LabPcName
     Write-Host "Searching for physical, connected, ethernet net adapter MAC addresses ..." -ForegroundColor DarkYellow
     $MACs = @()
     $script:config.labPcNames | ForEach-Object {
@@ -534,7 +534,7 @@ function Start-LabPc {
     [CmdletBinding(SupportsShouldProcess)]
     param ()
 
-    Watch-LabPcNames
+    Watch-LabPcName
 
     Write-Host "Start-LabPc works only if Computers support WoL. See documentation for details." -ForegroundColor DarkYellow
 
@@ -579,7 +579,7 @@ function Stop-LabPc {
         [switch]$AndRestart # Restart LabPcs
     )
 
-    Watch-LabPcNames
+    Watch-LabPcName
     switch ($PSCmdlet.ParameterSetName) {
         'Set0' {Stop-Computer -ComputerName $script:config.labPcNames -Force} # no parameter provided
         'Set1' {Get-LabPcStop} # -When provided
@@ -608,7 +608,7 @@ function Restart-LabPc {
 function New-LabPcStop {
     <#
     .SYNOPSIS
-        Schedule a new Lab Computer daily stop
+        Schedule a new LabPC daily stop
 
     .DESCRIPTION
         This cmdlet creates the new task StopThisComputer and if the task already exist, just adds the new stop time as a trigger to the task
@@ -679,7 +679,7 @@ function New-LabPcStop {
 function Get-LabPcStop {
     <#
     .SYNOPSIS
-        Gets Lab computer daily stops
+        Gets LabPC daily stops
 
     .DESCRIPTION
         This cmdlet gets all trigger times for StopThisComputer scheduled task
@@ -722,7 +722,7 @@ function Get-LabPcStop {
 function Remove-LabPcStop {
     <#
     .SYNOPSIS
-        Removes a Lab computer daily stop
+        Removes a LabPC daily stop
 
     .DESCRIPTION
         This cmdlet removes if exist the trigger from StopThisComputer scheduled task with time -DailyTime
@@ -798,7 +798,7 @@ function Set-LabPcName {
     .DESCRIPTION
         Allows to set/update config.json file through a GUI
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param()
 
     # Load the Windows Forms assembly
@@ -876,12 +876,12 @@ function Set-LabPcName {
 
     # Refresh function (reloading JSON)
     $refreshButton.Add_Click({
-        Load-JsonContent
+        Import-JsonContent
     })
 
     # Load the JSON content as soon as the form pops up
     $form.Add_Shown({
-        Load-JsonContent      # Then load the content
+        Import-JsonContent      # Then load the content
     })
 
     # Show the form
@@ -891,7 +891,7 @@ function Set-LabPcName {
 }
 
 # Function to load JSON content
-function Load-JsonContent {
+function Import-JsonContent {
     try {
         # Read the JSON file content
         $script:config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
