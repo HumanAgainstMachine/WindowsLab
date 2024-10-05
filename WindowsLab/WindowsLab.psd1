@@ -70,10 +70,10 @@ RequiredModules = @(@{ModuleName="NtpTime"; ModuleVersion="1.1"; Guid="7fb3dc99-
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Stop-LabComputer', 'Start-LabComputer', 'Set-LabComputerName',
-                     'Sync-LabComputerDate', 'Test-LabComputerPrompt', 
+FunctionsToExport = @('Stop-LabPc', 'Start-LabPc', 'Set-LabPcName',
+                     'Sync-LabPcDate', 'Test-LabPcPrompt', 
                     'Disconnect-User', 'New-LabUser', 'Remove-LabUser', 
-                    'Set-LabUser', 'Deploy-Item', 'Show-LabComputerMac')
+                    'Set-LabUser', 'Deploy-Item', 'Show-LabPcMac')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()

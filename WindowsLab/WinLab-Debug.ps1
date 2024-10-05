@@ -9,7 +9,7 @@ $form.Size = New-Object System.Drawing.Size(500, 350)  # Reduced height
 
 # Create a label for the computer names
 $labelNames = New-Object System.Windows.Forms.Label
-$labelNames.Text = "Set LabComputers Names (comma-separated):"
+$labelNames.Text = "Set LabPcs Names (comma-separated):"
 $labelNames.AutoSize = $true
 $labelNames.Location = New-Object System.Drawing.Point(10, 10)
 $form.Controls.Add($labelNames)
@@ -72,8 +72,8 @@ function Initialize-JsonFile {
     if (-not (Test-Path -Path $jsonFilePath)) {
         # Create an empty JSON structure with default values
         $emptyJson = @{
-            labComputerNames = @()
-            labComputerMACs  = @()
+            labPcNames = @()
+            labPcMacs  = @()
         }
         
         # Convert to JSON format and save to file
@@ -87,12 +87,12 @@ function Load-JsonContent {
         # Read the JSON file content
         $jsonContent = Get-Content -Path $jsonFilePath -Raw | ConvertFrom-Json
         
-        # Extract and display values from the 'labComputerNames' key (array of values)
-        $names = $jsonContent.labComputerNames -join ", "
+        # Extract and display values from the 'labPcNames' key (array of values)
+        $names = $jsonContent.labPcNames -join ", "
         $textboxNames.Text = $names
         
         # Extract and display the computer names and MAC addresses
-        DisplayComputerNamesAndMacs $jsonContent.labComputerNames $jsonContent.labComputerMACs
+        DisplayComputerNamesAndMacs $jsonContent.labPcNames $jsonContent.labPcMacs
         
         # Clear status label on successful load
         $statusLabel.Text = ""
@@ -144,9 +144,9 @@ $saveButton.Add_Click({
         # Cast to array to avoid PowerShell treating a single element as a string
         $newNames = $newNames -as [System.Array]
         
-        # Load the original JSON, update the 'labComputerNames' key with new values
+        # Load the original JSON, update the 'labPcNames' key with new values
         $jsonContent = Get-Content -Path $jsonFilePath -Raw | ConvertFrom-Json
-        $jsonContent.labComputerNames = $newNames
+        $jsonContent.labPcNames = $newNames
         
         # Save the updated JSON back to the file
         $jsonContent | ConvertTo-Json -Depth 10 | Set-Content -Path $jsonFilePath
@@ -156,7 +156,7 @@ $saveButton.Add_Click({
         $statusLabel.ForeColor = 'Green'
         
         # Refresh the displayed MAC addresses after saving
-        DisplayComputerNamesAndMacs $jsonContent.labComputerNames $jsonContent.labComputerMACs
+        DisplayComputerNamesAndMacs $jsonContent.labPcNames $jsonContent.labPcMacs
     } catch {
         # Show error message in red
         $statusLabel.Text = "Failed to save JSON."
@@ -170,7 +170,7 @@ $refreshButton.Add_Click({
 })
 
 # Function to simulate getting MAC addresses and return them as a comma-separated string
-function Get-LabComputerMac {
+function Get-LabPcMac {
     # # Simulate the shell process and return a comma-separated MAC address string
     # Start-Process powershell -ArgumentList "-NoExit", "-Command `"Write-Host 'Hey! I am running!'`""
     
@@ -181,7 +181,7 @@ function Get-LabComputerMac {
 $getMacsButton.Add_Click({
     try {
         # Get the comma-separated MAC address string
-        $macString = Get-LabComputerMac
+        $macString = Get-LabPcMac
         
         # Split the MAC string into an array
         $macAddresses = $macString -split ",\s*"
@@ -189,15 +189,15 @@ $getMacsButton.Add_Click({
         # Cast to array to avoid PowerShell treating a single element as a string
         $macAddresses = $macAddresses -as [System.Array]
         
-        # Load the original JSON, update the 'labComputerMACs' key with new values
+        # Load the original JSON, update the 'labPcMacs' key with new values
         $jsonContent = Get-Content -Path $jsonFilePath -Raw | ConvertFrom-Json
-        $jsonContent.labComputerMACs = $macAddresses
+        $jsonContent.labPcMacs = $macAddresses
         
         # Save the updated JSON back to the file
         $jsonContent | ConvertTo-Json -Depth 10 | Set-Content -Path $jsonFilePath
         
         # Display the computer names and MAC addresses in the panel
-        DisplayComputerNamesAndMacs $jsonContent.labComputerNames $macAddresses
+        DisplayComputerNamesAndMacs $jsonContent.labPcNames $macAddresses
         
         # Show success message in green
         $statusLabel.Text = "MAC addresses updated successfully."

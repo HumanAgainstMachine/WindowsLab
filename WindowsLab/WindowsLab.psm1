@@ -11,8 +11,8 @@ $configPath = Join-Path -Path $PSScriptRoot -ChildPath 'config.json'
 if (-not (Test-Path -Path $configPath -PathType Leaf)) {
     # Empty JSON structure
     $emptyJson = @{
-        labComputerNames = @()
-        labComputerMACs  = @()
+        labPcNames = @()
+        labPcMacs  = @()
     }
     
     # Convert and save to JSON file
@@ -21,18 +21,18 @@ if (-not (Test-Path -Path $configPath -PathType Leaf)) {
 
 $config = $null # Script (module) scope variable
 
-function Watch-LabComputerNames {
+function Watch-LabPcNames {
     $script:config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
     
-    if ($script:config.labComputerNames.Length -eq 0) {
-        Write-Host "LabComputer names not found. " -ForegroundColor Red
-        Write-Host "Run Set-LabComputerName to set LabComputer names,then open a new shell and try again."
+    if ($script:config.labPcNames.Length -eq 0) {
+        Write-Host "LabPc names not found. " -ForegroundColor Red
+        Write-Host "Run Set-LabPcName to set LabPc names,then open a new shell and try again."
         Exit 126 # Command invoked cannot execute
     }
 }
 
 
-function Test-LabComputerPrompt {
+function Test-LabPcPrompt {
     <#
     .SYNOPSIS
         Tests for each Lab computer if the WinRM service is running.
@@ -41,13 +41,13 @@ function Test-LabComputerPrompt {
         This cmdlet informs you which Lab computers are ready to accept cmdlets from Main computer.
 
     .EXAMPLE
-        Test-LabComputerPrompt
+        Test-LabPcPrompt
     #>
     [CmdletBinding()]
     param ()
-    Watch-LabComputerNames
+    Watch-LabPcNames
 
-    foreach ($pc in $script:config.labComputerNames) {
+    foreach ($pc in $script:config.labPcNames) {
         try {
             Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
             Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
@@ -60,13 +60,13 @@ function Test-LabComputerPrompt {
     }
 }
 
-function Sync-LabComputerDate {
+function Sync-LabPcDate {
     <#
     .SYNOPSIS
         Sync the date with the NTP time for each computer.
 
         .EXAMPLE
-        Sync-LabComputerDate
+        Sync-LabPcDate
 
     .NOTES
         The NtpTime module is required on MasterComputer (https://www.powershellgallery.com/packages/NtpTime/1.1)
@@ -75,7 +75,7 @@ function Sync-LabComputerDate {
     #>
     [CmdletBinding()]
     param ()
-    Watch-LabComputerNames
+    Watch-LabPcNames
 
     # check if NtpTime module is installed
     if ($null -eq (Get-Module -ListAvailable -Name NtpTime)) {
@@ -91,7 +91,7 @@ function Sync-LabComputerDate {
 
         Set-Date -Date $currentDate | Out-Null
         Write-Host "MasterComputer synchronized" -ForegroundColor Green
-        Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+        Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
             Set-Date -Date $Using:currentDate | Out-Null
             Write-Host "$env:computername synchronized" -ForegroundColor Green
         }
@@ -117,10 +117,10 @@ function Deploy-Item {
         [string]$UserName        
     )
 
-    Watch-LabComputerNames
+    Watch-LabPcNames
     Resolve-Path -Path $Path -ErrorAction Stop | Out-Null
 
-    $script:config.labComputerNames | ForEach-Object -Parallel {
+    $script:config.labPcNames | ForEach-Object -Parallel {
         $session = New-PSSession -ComputerName $_
         $labUserprofilePath = Invoke-Command -Session $session -ScriptBlock {
             param($UName)
@@ -174,8 +174,8 @@ function Disconnect-User {
     [CmdletBinding()]
     param()
 
-    Watch-LabComputerNames
-    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+    Watch-LabPcNames
+    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope
         try {
             # check if quser command exist
@@ -225,8 +225,8 @@ function New-LabUser {
       [string]$UserName
     )
 
-    Watch-LabComputerNames
-    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+    Watch-LabPcNames
+    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         try {
             $blankPassword = [securestring]::new()
             New-LocalUser -Name $Using:UserName -Password $blankPassword -PasswordNeverExpires `
@@ -262,8 +262,8 @@ function Remove-LabUser {
       [string]$UserName
     )
 
-    Watch-LabComputerNames
-    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+    Watch-LabPcNames
+    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         try {
             # check if quser command exist
             Get-Command -Name quser -ErrorAction Stop | Out-Null
@@ -329,14 +329,14 @@ function Set-LabUser {
         [switch]$RestoreDesktop
     )
 
-    Watch-LabComputerNames
+    Watch-LabPcNames
     switch ($PSCmdlet.ParameterSetName) {
         'Set0' {$password = $null
                 if ($SetPassword.IsPresent) {
                     # Prompt and read new password
                     $password = Read-Host -Prompt 'Enter the new password' -AsSecureString
                 }
-                Invoke-Command -ComputerName $script:config.labComputerNames  -ScriptBlock {
+                Invoke-Command -ComputerName $script:config.labPcNames  -ScriptBlock {
                     try {
                         if ($Using:SetPassword.IsPresent) {
                             # change password
@@ -377,10 +377,10 @@ function Set-LabUser {
 function Backup-LabUserDesktop {
     <#
     .SYNOPSIS
-        Back up LabUser desktop into ROOT:\LabComputer folder
+        Back up LabUser desktop into ROOT:\LabPc folder
 
     .DESCRIPTION
-        This cmdlet copies LabUser desktop files and folders into into ROOT:|LabComputer folder and deletes any previous item.
+        This cmdlet copies LabUser desktop files and folders into into ROOT:|LabPc folder and deletes any previous item.
 
     .EXAMPLE
         Backup-LabUserDesktop -UserName Alunno
@@ -390,7 +390,7 @@ function Backup-LabUserDesktop {
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName
     )
-    invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+    invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -401,13 +401,13 @@ function Backup-LabUserDesktop {
 
             $userDesktopPath = Join-Path -Path $userprofilePath -ChildPath 'Desktop'
 
-            # create LabComputer folder if not exist
-            $labComputerPath = Join-Path -Path $env:SystemDrive -ChildPath 'LabComputer'
-            New-Item -Path $labComputerPath -ItemType "directory" -ErrorAction SilentlyContinue
+            # create LabPc folder if not exist
+            $labPcPath = Join-Path -Path $env:SystemDrive -ChildPath 'LabPc'
+            New-Item -Path $labPcPath -ItemType "directory" -ErrorAction SilentlyContinue
 
             # copy labuser desktop
-            Remove-Item -Path $labComputerPath -Force -Recurse -ErrorAction SilentlyContinue # delete any previous saved desktop
-            Copy-Item -Path "$userDesktopPath\" -Destination $labComputerPath -Recurse -Force
+            Remove-Item -Path $labPcPath -Force -Recurse -ErrorAction SilentlyContinue # delete any previous saved desktop
+            Copy-Item -Path "$userDesktopPath\" -Destination $labPcPath -Recurse -Force
 
             Write-Host "$Using:Username Desktop saved for $env:computername" -ForegroundColor Green
         }
@@ -426,10 +426,10 @@ function Backup-LabUserDesktop {
 function Restore-LabUserDesktop {
     <#
     .SYNOPSIS
-        Restore LabUser desktop backup from ROOT:\LabComputer 
+        Restore LabUser desktop backup from ROOT:\LabPc 
 
     .DESCRIPTION
-        This cmdlet copies back the LabUser desktop backup from ROOT:\LabComputer folder, overwrite any existing items.
+        This cmdlet copies back the LabUser desktop backup from ROOT:\LabPc folder, overwrite any existing items.
 
     .EXAMPLE
         Restore-LabUserDesktop -UserName Alunno
@@ -439,7 +439,7 @@ function Restore-LabUserDesktop {
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName
     )
-    invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+    invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -451,7 +451,7 @@ function Restore-LabUserDesktop {
             $userDesktopPath = Join-Path -Path $userprofilePath -ChildPath 'Desktop'
 
             # copy lab user desktop back
-            $sourcePath = Join-Path -Path $env:SystemDrive -ChildPath "LabComputer"
+            $sourcePath = Join-Path -Path $env:SystemDrive -ChildPath "LabPc"
             Copy-Item -Path "$sourcePath\*" -Destination $userDesktopPath -Recurse -Force
 
             Write-Host "$Using:Username Desktop restored for $env:computername" -ForegroundColor Green
@@ -468,22 +468,22 @@ function Restore-LabUserDesktop {
 }
 
 
-# -- LabComputer section --
+# -- LabPc section --
 
-function Show-LabComputerMac {
+function Show-LabPcMac {
     <#
     .SYNOPSIS
         Show info about ethernet ComputerLab MAC addresses
     
     .DESCRIPTION
-        Show-LabComputerMac searchs for Ethernet (wired LAN) MAC addresses for later use with WoL in 
-        Start-LabComputer cmdlet, 
+        Show-LabPcMac searchs for Ethernet (wired LAN) MAC addresses for later use with WoL in 
+        Start-LabPc cmdlet, 
     #>
 
-    Watch-LabComputerNames
+    Watch-LabPcNames
     Write-Host "Searching for physical, connected, ethernet net adapter MAC addresses ..." -ForegroundColor DarkYellow
     $MACs = @()
-    $script:config.labComputerNames | ForEach-Object {
+    $script:config.labPcNames | ForEach-Object {
         try {
             Write-Host "$_ " -ForegroundColor DarkYellow -NoNewline
             # Search for Physical, connected (Up), ethernet (standard 802.3) adapter
@@ -509,24 +509,24 @@ function Show-LabComputerMac {
         }
     }
 
-    $script:config.labComputerMACs = $MACs
-    if ($script:config.labComputerNames.Length -eq $script:config.labComputerMACs.Length) {
+    $script:config.labPcMacs = $MACs
+    if ($script:config.labPcNames.Length -eq $script:config.labPcMacs.Length) {
         # Save the updated JSON back to the file
         $script:config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-        Write-Host "MAC addresses saved for use with Start-LabComputer cmdlet." -ForegroundColor DarkYellow
+        Write-Host "MAC addresses saved for use with Start-LabPc cmdlet." -ForegroundColor DarkYellow
     }
     else {
-        Write-Host "Fix network adapter issues before using MAC addresses with Start-LabComputer cmdlet." -ForegroundColor Red
+        Write-Host "Fix network adapter issues before using MAC addresses with Start-LabPc cmdlet." -ForegroundColor Red
     }
 }
 
-function Start-LabComputer {
+function Start-LabPc {
     <#
     .SYNOPSIS
         Turn on each computers if WoL setting is present and enabled in BIOS/UEFI
 
     .EXAMPLE
-        Start-LabComputer
+        Start-LabPc
 
     .NOTES
         https://www.pdq.com/blog/wake-on-lan-wol-magic-packet-powershell/
@@ -534,13 +534,13 @@ function Start-LabComputer {
     [CmdletBinding(SupportsShouldProcess)]
     param ()
 
-    Watch-LabComputerNames
+    Watch-LabPcNames
 
-    Write-Host "Start-LabComputer works only if Computers support WoL. See documentation for details." -ForegroundColor DarkYellow
+    Write-Host "Start-LabPc works only if Computers support WoL. See documentation for details." -ForegroundColor DarkYellow
 
-    if ($script:config.labComputerNames.Length -eq $script:config.labComputerMACs.Length) {
+    if ($script:config.labPcNames.Length -eq $script:config.labPcMacs.Length) {
         # send Magic Packet over LAN
-        foreach ($Mac in $script:config.labComputerMACs) {
+        foreach ($Mac in $script:config.labPcMacs) {
             $MacByteArray = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
             [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
             $UdpClient = New-Object System.Net.Sockets.UdpClient
@@ -550,62 +550,62 @@ function Start-LabComputer {
         }
     } 
     else {
-        Write-Host "MAC address and computer name count mismatch. Run Show-LabComputerMac to fix." -ForegroundColor Red
+        Write-Host "MAC address and computer name count mismatch. Run Show-LabPcMac to fix." -ForegroundColor Red
     }
 }
 
-function Stop-LabComputer {
+function Stop-LabPc {
     <#
     .SYNOPSIS
         Force an immediate shut down of each computer
 
     .EXAMPLE
-        Stop-LabComputer
+        Stop-LabPc
 
     .NOTES
     #>    
     [CmdletBinding(DefaultParameterSetName = 'Set0', SupportsShouldProcess = $true)]
     param (
         [Parameter(ParameterSetName = 'Set1')]
-        [switch]$When, # Get scheduled LabComputers daily stops
+        [switch]$When, # Get scheduled LabPcs daily stops
 
         [Parameter(ParameterSetName = 'Set2')]
-        [string]$DailyAt, # Schedule a new LabComputer daily stop
+        [string]$DailyAt, # Schedule a new LabPc daily stop
 
         [Parameter(ParameterSetName = 'Set3')]
-        [string]$NoMoreAt, # Remove a Labcomputer daily stop
+        [string]$NoMoreAt, # Remove a LabPc daily stop
 
         [Parameter(ParameterSetName = 'Set4')]
-        [switch]$AndRestart # Restart LabComputers
+        [switch]$AndRestart # Restart LabPcs
     )
 
-    Watch-LabComputerNames
+    Watch-LabPcNames
     switch ($PSCmdlet.ParameterSetName) {
-        'Set0' {Stop-Computer -ComputerName $script:config.labComputerNames -Force} # no parameter provided
-        'Set1' {Get-LabComputerStop} # -When provided
-        'Set2' {New-LabComputerStop -DailyTime $DailyAt} # -DailyAt provided
-        'Set3' {Remove-LabComputerStop -DailyTime $NoMoreAt} # -NoMoreAt provided
-        'Set4' {Restart-LabComputer} # -AndRestart provided
+        'Set0' {Stop-Computer -ComputerName $script:config.labPcNames -Force} # no parameter provided
+        'Set1' {Get-LabPcStop} # -When provided
+        'Set2' {New-LabPcStop -DailyTime $DailyAt} # -DailyAt provided
+        'Set3' {Remove-LabPcStop -DailyTime $NoMoreAt} # -NoMoreAt provided
+        'Set4' {Restart-LabPc} # -AndRestart provided
     }
 }
 
-function Restart-LabComputer {
+function Restart-LabPc {
     <#
     .SYNOPSIS
         Force an immediate restart of each computer and wait for them to be on again
 
     .EXAMPLE
-        Restart-LabComputer
+        Restart-LabPc
 
     .NOTES
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param()
-    Restart-Computer -ComputerName $script:config.labComputerNames -Force
+    Restart-Computer -ComputerName $script:config.labPcNames -Force
 }
 
 
-function New-LabComputerStop {
+function New-LabPcStop {
     <#
     .SYNOPSIS
         Schedule a new Lab Computer daily stop
@@ -614,7 +614,7 @@ function New-LabComputerStop {
         This cmdlet creates the new task StopThisComputer and if the task already exist, just adds the new stop time as a trigger to the task
 
     .EXAMPLE
-        New-LabComputerStop -DailyTime '14:15'
+        New-LabPcStop -DailyTime '14:15'
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -640,7 +640,7 @@ function New-LabComputerStop {
     # Set the action
     $action = New-ScheduledTaskAction -Execute 'Powershell' -Argument '-NoProfile -ExecutionPolicy Bypass -Command "& {Stop-Computer -Force}"'
 
-    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
 
         # Set principal contex for SYSTEM account to run as a service with with the highest privileges
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
@@ -676,7 +676,7 @@ function New-LabComputerStop {
     }
 }
 
-function Get-LabComputerStop {
+function Get-LabPcStop {
     <#
     .SYNOPSIS
         Gets Lab computer daily stops
@@ -685,12 +685,12 @@ function Get-LabComputerStop {
         This cmdlet gets all trigger times for StopThisComputer scheduled task
 
     .EXAMPLE
-        Get-LabComputerStop
+        Get-LabPcStop
     #>
     [CmdletBinding()]
     param ()
 
-    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
 
         $formattedTime = "`n${env:COMPUTERNAME}:`n  "
         try {
@@ -719,7 +719,7 @@ function Get-LabComputerStop {
     }
 }
 
-function Remove-LabComputerStop {
+function Remove-LabPcStop {
     <#
     .SYNOPSIS
         Removes a Lab computer daily stop
@@ -728,7 +728,7 @@ function Remove-LabComputerStop {
         This cmdlet removes if exist the trigger from StopThisComputer scheduled task with time -DailyTime
 
     .EXAMPLE
-        Remove-LabComputerStop -DailyTime '14:14'
+        Remove-LabPcStop -DailyTime '14:14'
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -748,7 +748,7 @@ function Remove-LabComputerStop {
     # Convert $DailyTimeObj to a TimeSpan object
     $dailyStopTime = $dailyTimeObj.TimeOfDay
 
-    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
+    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
 
         try {
             # Get scheduled StopThisComputer task if exist
@@ -790,10 +790,10 @@ function Remove-LabComputerStop {
 
 # -- GUI --
 
-function Set-LabComputerName {
+function Set-LabPcName {
     <#
     .SYNOPSIS
-        GUI to manage LabComputers names
+        GUI to manage LabPcs names
     
     .DESCRIPTION
         Allows to set/update config.json file through a GUI
@@ -812,7 +812,7 @@ function Set-LabComputerName {
 
     # Create a label for the computer names
     $labelNames = New-Object System.Windows.Forms.Label
-    $labelNames.Text = "Set LabComputers Names (comma-separated):"
+    $labelNames.Text = "Set LabPcs Names (comma-separated):"
     $labelNames.AutoSize = $true
     $labelNames.Location = New-Object System.Drawing.Point(10, 10)
     $form.Controls.Add($labelNames)
@@ -856,9 +856,9 @@ function Set-LabComputerName {
             # Cast to array to avoid PowerShell treating a single element as a string
             $newNames = $newNames -as [System.Array]
             
-            # Load the original JSON, update the 'labComputerNames' key with new values
+            # Load the original JSON, update the 'labPcNames' key with new values
             $script:config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
-            $script:config.labComputerNames = $newNames
+            $script:config.labPcNames = $newNames
             
             # Save the updated JSON back to the file
             $script:config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
@@ -896,8 +896,8 @@ function Load-JsonContent {
         # Read the JSON file content
         $script:config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
         
-        # Extract and display values from the 'labComputerNames' key (array of values)
-        $names = $script:config.labComputerNames -join ", "
+        # Extract and display values from the 'labPcNames' key (array of values)
+        $names = $script:config.labPcNames -join ", "
         $textboxNames.Text = $names
         
         # Clear status label on successful load
