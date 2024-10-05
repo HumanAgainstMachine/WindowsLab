@@ -1,83 +1,34 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    ComputerRoom tools
-
-.NOTES
-    Script variables are essentially module variables
+    WindowsLab, tools to admin a Windows based Lab
 #>
 
-# get path to config.json
+# Get path to config.json
 $configPath = Join-Path -Path $PSScriptRoot -ChildPath 'config.json'
 
-if (Test-Path -Path $configPath -PathType Leaf) {
-    # read config file
-    $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
-
-    $labComputerNames = $config.labComputerNames
-    $labComputerMACs = $config.labComputerMACs
-} else {
-    $t = "
-===========================================
----         WinLabAdmin Module          ---
-===========================================
-"
-    Write-Host $t.Trim() -ForegroundColor DarkYellow
-    Write-Host "config.json not found at the following path:" -ForegroundColor Red
-    Write-Host $PSScriptRoot -ForegroundColor DarkYellow
-    Write-Host "1. rename config.json.example to config.json"
-    Write-Host "2. update config.json with lab computer names in your lab. Ignore Mac Addresses at this step"
-    Write-Host "3. open a new shell and try again"
-    Exit 2 # file not found
+# Create an empty config.json file if missing
+if (-not (Test-Path -Path $configPath -PathType Leaf)) {
+    # Empty JSON structure
+    $emptyJson = @{
+        labComputerNames = @()
+        labComputerMACs  = @()
+    }
+    
+    # Convert and save to JSON file
+    $emptyJson | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
 }
 
-function Show-Config {
-    <#
-    .SYNOPSIS
-        Shows imported config.json content and if mac addresses are missing get them for you
+$config = $null # Script (module) scope variable
 
-    .EXAMPLE
-        Read-Config
-
-    .NOTES
-        Filtering the adapters with status: `Up` should be enaught to select the
-        adapter used for PS Remoting
-    #>
-    [CmdletBinding()]
-    param ()
-    $t = "
-===========================================
----     Imported from config.json       ---
-===========================================
-"
-
-    Write-Host $t.Trim() -ForegroundColor DarkYellow
-
-    Write-Host 'Lab Computer: ' -NoNewline
-    Write-Host $labComputerNames -Separator ', '
-
-    Write-Host 'Mac Addresses  : ' -NoNewline
-    Write-Host $labComputerMACs -Separator ', '
-
-    $t = "
-===========================
--- Mac Addresses check   --
-===========================
-"
-
-    Write-Host $t.Trim() -ForegroundColor DarkYellow
-    Write-Host 'Trying to find Mac Addresses ...'
-    foreach ($pc in $labComputerNames) {
-        $macAddress = Get-NetAdapter -CimSession $PC | Where-Object {$_.Status -eq 'Up'} | Select-Object MacAddress
-
-        Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
-        if ($macAddress.Length -gt 1) {
-            Write-Host $macAddress.MacAddress, "=== $($macAddress.Length) Net Adapters here, choose one ===" -Separator ', '
-        } else {
-            Write-Host $macAddress.MacAddress
-        }
+function Watch-LabComputerNames {
+    $script:config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
+    
+    if ($script:config.labComputerNames.Length -eq 0) {
+        Write-Host "LabComputer names not found. " -ForegroundColor Red
+        Write-Host "Run Set-LabComputerName to set LabComputer names,then open a new shell and try again."
+        Exit 126 # Command invoked cannot execute
     }
-
 }
 
 
@@ -94,8 +45,9 @@ function Test-LabComputerPrompt {
     #>
     [CmdletBinding()]
     param ()
+    Watch-LabComputerNames
 
-    foreach ($pc in $labComputerNames) {
+    foreach ($pc in $script:config.labComputerNames) {
         try {
             Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
             Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
@@ -123,6 +75,8 @@ function Sync-LabComputerDate {
     #>
     [CmdletBinding()]
     param ()
+    Watch-LabComputerNames
+
     # check if NtpTime module is installed
     if ($null -eq (Get-Module -ListAvailable -Name NtpTime)) {
         Write-Host "`nNtpTime Module missing. Install the module with:" -ForegroundColor Yellow
@@ -137,7 +91,7 @@ function Sync-LabComputerDate {
 
         Set-Date -Date $currentDate | Out-Null
         Write-Host "MasterComputer synchronized" -ForegroundColor Green
-        Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+        Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
             Set-Date -Date $Using:currentDate | Out-Null
             Write-Host "$env:computername synchronized" -ForegroundColor Green
         }
@@ -163,9 +117,10 @@ function Deploy-Item {
         [string]$UserName        
     )
 
+    Watch-LabComputerNames
     Resolve-Path -Path $Path -ErrorAction Stop | Out-Null
 
-    $labComputerNames | ForEach-Object -Parallel {
+    $script:config.labComputerNames | ForEach-Object -Parallel {
         $session = New-PSSession -ComputerName $_
         $labUserprofilePath = Invoke-Command -Session $session -ScriptBlock {
             param($UName)
@@ -219,7 +174,8 @@ function Disconnect-User {
     [CmdletBinding()]
     param()
 
-    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+    Watch-LabComputerNames
+    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope
         try {
             # check if quser command exist
@@ -269,7 +225,8 @@ function New-LabUser {
       [string]$UserName
     )
 
-    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+    Watch-LabComputerNames
+    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
         try {
             $blankPassword = [securestring]::new()
             New-LocalUser -Name $Using:UserName -Password $blankPassword -PasswordNeverExpires `
@@ -305,7 +262,8 @@ function Remove-LabUser {
       [string]$UserName
     )
 
-    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+    Watch-LabComputerNames
+    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
         try {
             # check if quser command exist
             Get-Command -Name quser -ErrorAction Stop | Out-Null
@@ -371,13 +329,14 @@ function Set-LabUser {
         [switch]$RestoreDesktop
     )
 
+    Watch-LabComputerNames
     switch ($PSCmdlet.ParameterSetName) {
         'Set0' {$password = $null
                 if ($SetPassword.IsPresent) {
                     # Prompt and read new password
                     $password = Read-Host -Prompt 'Enter the new password' -AsSecureString
                 }
-                Invoke-Command -ComputerName $labComputerNames  -ScriptBlock {
+                Invoke-Command -ComputerName $script:config.labComputerNames  -ScriptBlock {
                     try {
                         if ($Using:SetPassword.IsPresent) {
                             # change password
@@ -431,7 +390,7 @@ function Backup-LabUserDesktop {
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName
     )
-    invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+    invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -480,7 +439,7 @@ function Restore-LabUserDesktop {
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName
     )
-    invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+    invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -511,49 +470,54 @@ function Restore-LabUserDesktop {
 
 # -- LabComputer section --
 
-function Get-LabComputerMac {
+function Show-LabComputerMac {
     <#
     .SYNOPSIS
-        Search for ethernet ComputerLab Mac addresses
+        Show info about ethernet ComputerLab MAC addresses
     
     .DESCRIPTION
-        Search Ethernet (wired LAN) MAC addresses for later use with WoL in Start-LabComputer cmdlet, return null or the array of macs
+        Show-LabComputerMac searchs for Ethernet (wired LAN) MAC addresses for later use with WoL in 
+        Start-LabComputer cmdlet, 
     #>
 
+    Watch-LabComputerNames
+    Write-Host "Searching for physical, connected, ethernet net adapter MAC addresses ..." -ForegroundColor DarkYellow
     $MACs = @()
-    $labComputerNames | ForEach-Object {
+    $script:config.labComputerNames | ForEach-Object {
         try {
             Write-Host "$_ " -ForegroundColor DarkYellow -NoNewline
-            # search for Physical, connected (Up), ethernet (standard 802.3) adapter
-            $netAdapter = Get-NetAdapter -Physical -CimSession $_ | Where-Object {
-                            $_.Status -eq "Up" -and ($_.PhysicalMediaType -like "*802.3*" -or $_.Name -like "*Ethernet*")
-                        } | Select-Object MacAddress, PhysicalMediaType 
+            # Search for Physical, connected (Up), ethernet (standard 802.3) adapter
+            $netAdapter = Get-NetAdapter -Physical -CimSession $_ |
+            Where-Object {
+                $_.Status -eq "Up" -and ($_.PhysicalMediaType -like "*802.3*" -or $_.Name -like "*Ethernet*")
+            } | Select-Object MacAddress 
                         
-            if ($netAdapter.Length -eq 1) {
+            if ($netAdapter.Length -eq 1) { # Found one case
                 $MACs += $netAdapter.MacAddress
                 Write-Host $netAdapter.MacAddress
             }
-            else {
+            else { # Found more then one case
                 Write-Host "seams to have multiple ethernet net adapters, disconnect all but one" -NoNewline
                 Write-Host $netAdapter.MacAddress -Separator ', ' 
             }
          
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-            Write-Host "Not reachable " -ForegroundColor Red -NoNewline
-            Write-Host "(is computer on and cable connected?)" -ForegroundColor DarkYellow
+            # Found none case
+            Write-Host "Not yet reachable " -ForegroundColor Red -NoNewline
+            Write-Host "(is computer on and connected via ethernet?)" -ForegroundColor DarkYellow
         }
     }
 
-    if ($MACs.Length -eq $labComputerNames.Length) {
-        Write-Host "Everithing is ok, press key to save MAC addresses"
-        return $MACs
+    $script:config.labComputerMACs = $MACs
+    if ($script:config.labComputerNames.Length -eq $script:config.labComputerMACs.Length) {
+        # Save the updated JSON back to the file
+        $script:config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
+        Write-Host "MAC addresses saved for use with Start-LabComputer cmdlet." -ForegroundColor DarkYellow
     }
     else {
-        Write-Host "MAC addresses will not be saved, correct what's wrong and launch again FIX missing MAC addresses"
-        return $null
+        Write-Host "Fix network adapter issues before using MAC addresses with Start-LabComputer cmdlet." -ForegroundColor Red
     }
-
 }
 
 function Start-LabComputer {
@@ -570,16 +534,24 @@ function Start-LabComputer {
     [CmdletBinding(SupportsShouldProcess)]
     param ()
 
-    # send Magic Packet over LAN
-    foreach ($Mac in $labComputerMACs) {
-        $MacByteArray = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
-        [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
-        $UdpClient = New-Object System.Net.Sockets.UdpClient
-        $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
-        $UdpClient.Send($MagicPacket,$MagicPacket.Length)
-        $UdpClient.Close()
-    }
+    Watch-LabComputerNames
 
+    Write-Host "Start-LabComputer works only if Computers support WoL. See documentation for details." -ForegroundColor DarkYellow
+
+    if ($script:config.labComputerNames.Length -eq $script:config.labComputerMACs.Length) {
+        # send Magic Packet over LAN
+        foreach ($Mac in $script:config.labComputerMACs) {
+            $MacByteArray = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
+            [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
+            $UdpClient = New-Object System.Net.Sockets.UdpClient
+            $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
+            $UdpClient.Send($MagicPacket,$MagicPacket.Length)
+            $UdpClient.Close()
+        }
+    } 
+    else {
+        Write-Host "MAC address and computer name count mismatch. Run Show-LabComputerMac to fix." -ForegroundColor Red
+    }
 }
 
 function Stop-LabComputer {
@@ -607,8 +579,9 @@ function Stop-LabComputer {
         [switch]$AndRestart # Restart LabComputers
     )
 
+    Watch-LabComputerNames
     switch ($PSCmdlet.ParameterSetName) {
-        'Set0' {Stop-Computer -ComputerName $labComputerNames -Force} # no parameter provided
+        'Set0' {Stop-Computer -ComputerName $script:config.labComputerNames -Force} # no parameter provided
         'Set1' {Get-LabComputerStop} # -When provided
         'Set2' {New-LabComputerStop -DailyTime $DailyAt} # -DailyAt provided
         'Set3' {Remove-LabComputerStop -DailyTime $NoMoreAt} # -NoMoreAt provided
@@ -628,7 +601,7 @@ function Restart-LabComputer {
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param()
-    Restart-Computer -ComputerName $labComputerNames -Force
+    Restart-Computer -ComputerName $script:config.labComputerNames -Force
 }
 
 
@@ -667,7 +640,7 @@ function New-LabComputerStop {
     # Set the action
     $action = New-ScheduledTaskAction -Execute 'Powershell' -Argument '-NoProfile -ExecutionPolicy Bypass -Command "& {Stop-Computer -Force}"'
 
-    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
 
         # Set principal contex for SYSTEM account to run as a service with with the highest privileges
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
@@ -717,7 +690,7 @@ function Get-LabComputerStop {
     [CmdletBinding()]
     param ()
 
-    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
 
         $formattedTime = "`n${env:COMPUTERNAME}:`n  "
         try {
@@ -775,7 +748,7 @@ function Remove-LabComputerStop {
     # Convert $DailyTimeObj to a TimeSpan object
     $dailyStopTime = $dailyTimeObj.TimeOfDay
 
-    Invoke-Command -ComputerName $labComputerNames -ScriptBlock {
+    Invoke-Command -ComputerName $script:config.labComputerNames -ScriptBlock {
 
         try {
             # Get scheduled StopThisComputer task if exist
@@ -811,5 +784,128 @@ function Remove-LabComputerStop {
             Write-Host "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
         }
 
+    }
+}
+
+
+# -- GUI --
+
+function Set-LabComputerName {
+    <#
+    .SYNOPSIS
+        GUI to manage LabComputers names
+    
+    .DESCRIPTION
+        Allows to set/update config.json file through a GUI
+    #>
+    [CmdletBinding()]
+    param()
+
+    # Load the Windows Forms assembly
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    # Create the form
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Lab Settings"
+    $form.Size = New-Object System.Drawing.Size(500, 175)  # Reduced height
+
+    # Create a label for the computer names
+    $labelNames = New-Object System.Windows.Forms.Label
+    $labelNames.Text = "Set LabComputers Names (comma-separated):"
+    $labelNames.AutoSize = $true
+    $labelNames.Location = New-Object System.Drawing.Point(10, 10)
+    $form.Controls.Add($labelNames)
+
+    # Create a TextBox to display and edit the computer names
+    $textboxNames = New-Object System.Windows.Forms.TextBox
+    $textboxNames.Multiline = $false
+    $textboxNames.ScrollBars = 'Horizontal'
+    $textboxNames.Size = New-Object System.Drawing.Size(465, 30)  # Increased width
+    $textboxNames.Location = New-Object System.Drawing.Point(10, 35)
+    $form.Controls.Add($textboxNames)
+
+    # Create Save button
+    $saveButton = New-Object System.Windows.Forms.Button
+    $saveButton.Text = "Save"
+    $saveButton.Location = New-Object System.Drawing.Point(10, 100)  # Moved buttons down to create more room
+    $form.Controls.Add($saveButton)
+
+    # Create Refresh button
+    $refreshButton = New-Object System.Windows.Forms.Button
+    $refreshButton.Text = "Refresh"
+    $refreshButton.Location = New-Object System.Drawing.Point(100, 100)  # Moved buttons down to create more room
+    $form.Controls.Add($refreshButton)
+
+    # Create a status label for success/failure messages
+    $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.AutoSize = $true
+    $statusLabel.Location = New-Object System.Drawing.Point(10, 75)
+    $form.Controls.Add($statusLabel)
+
+    
+    # Save JSON function
+    $saveButton.Add_Click({
+        try {
+            # Get the updated computer names from the textbox (comma-separated)
+            $newNames = $textboxNames.Text -split ",\s*"
+            
+            # Silently remove empty values
+            $newNames = $newNames | Where-Object { $_ -ne "" }
+            
+            # Cast to array to avoid PowerShell treating a single element as a string
+            $newNames = $newNames -as [System.Array]
+            
+            # Load the original JSON, update the 'labComputerNames' key with new values
+            $script:config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
+            $script:config.labComputerNames = $newNames
+            
+            # Save the updated JSON back to the file
+            $script:config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
+            
+            # Show success message in green
+            $statusLabel.Text = "Settings saved successfully."
+            $statusLabel.ForeColor = 'Green'
+            
+        } catch {
+            # Show error message in red
+            $statusLabel.Text = "Failed to save settings."
+            $statusLabel.ForeColor = 'Red'
+        }
+    })
+
+    # Refresh function (reloading JSON)
+    $refreshButton.Add_Click({
+        Load-JsonContent
+    })
+
+    # Load the JSON content as soon as the form pops up
+    $form.Add_Shown({
+        Load-JsonContent      # Then load the content
+    })
+
+    # Show the form
+    $form.ShowDialog()
+
+
+}
+
+# Function to load JSON content
+function Load-JsonContent {
+    try {
+        # Read the JSON file content
+        $script:config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
+        
+        # Extract and display values from the 'labComputerNames' key (array of values)
+        $names = $script:config.labComputerNames -join ", "
+        $textboxNames.Text = $names
+        
+        # Clear status label on successful load
+        $statusLabel.Text = ""
+        
+    } catch {
+        # Show error message in red
+        $statusLabel.Text = "Failed to load JSON."
+        $statusLabel.ForeColor = 'Red'
     }
 }
