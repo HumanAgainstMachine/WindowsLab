@@ -1,7 +1,9 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    
+    Script for getting the lab ready.
+.LINK
+    https://github.com/HumanAgainstMachine/WindowsLab
 #>
 try {
     Write-Host @"
