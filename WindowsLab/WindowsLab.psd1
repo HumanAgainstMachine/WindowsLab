@@ -12,7 +12,7 @@
 RootModule = '.\WindowsLab.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.0'
+ModuleVersion = '1.0.1'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Core')
@@ -30,14 +30,16 @@ CompanyName = 'Unknown'
 Copyright = '(c) Human.Against.Machine. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = """**WindowsLab** is a PowerShell module designed to simplify the administration of a computer lab running Windows OS. It provides cmdlets for common tasks such as:
+Description = @'
+WindowsLab is a PowerShell module designed to simplify the administration of a computer lab running Windows OS. It provides cmdlets for common tasks such as:
 
 - Starting, restarting, and stopping all computers.
 - Updating date and time on all computers.
 - Creating and removing local accounts.
 - Changing passwords.
 - Disconnecting users.
-- Sending files to all computers at once."""
+- Sending files to all computers at once.
+'@
 
 # Minimum version of the PowerShell engine required by this module
 PowerShellVersion = '7.1'
@@ -106,7 +108,7 @@ PrivateData = @{
     PSData = @{
 
         # Tags applied to this module. These help with module discovery in online galleries.
-        Tags = @('Windows', 'Powershell', 'Computer-Laboratory')
+        Tags = @('Windows', 'Lab-management', 'Computer-room', 'Automation', 'Users-management')
 
         # A URL to the license for this module.
         LicenseUri = 'https://github.com/HumanAgainstMachine/WindowsLab/?tab=MIT-1-ov-file'
@@ -118,7 +120,27 @@ PrivateData = @{
         # IconUri = ''
 
         # ReleaseNotes of this module
-        # ReleaseNotes = ''
+        ReleaseNotes = @'
+## [1.0.1] - 2024-10-07
+### Added
+- GettingLabReady.ps1 script helps to automate each LabPC preparation.
+- Changelog to manifest.
+
+### Fixed
+- Typos in manifest description value, now use here-string.
+
+## [1.0.0] - 2024-10-05
+### Added
+- Set-LabPcName cmdlet, opens a GUI to set LabPC names.
+
+### Changed
+- Improved cmdlets names.
+- Updated overall documentation.
+
+## [0.9.0] - 2024-08-06
+### Initial Release
+- A group of cmdlets for managing a laboratory.
+'@
 
         # Prerelease string of this module
         # Prerelease = ''

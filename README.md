@@ -43,7 +43,7 @@ Before using WindowsLab, manually create the **LabAdmin** account on each PC wit
 
 ## Module Installation
 
-To install the WindowsLab module:
+Install [WindowsLab](https://www.powershellgallery.com/packages/WindowsLab) from the Powershellgallery.
 
 1. Log in as **LabAdmin** on the AdminPC.
 2. Run:
