@@ -43,7 +43,13 @@ Before using WindowsLab, manually create the **LabAdmin** account on each PC wit
 
 ## Module Installation
 
-Install [WindowsLab](https://www.powershellgallery.com/packages/WindowsLab) from the Powershellgallery.
+WindowsLab depends on module *NtpTime* to take time from internet, it's required so install it.
+
+```powershell
+Install-Module -Name NtpTime
+```
+
+Now, you can install [WindowsLab](https://www.powershellgallery.com/packages/WindowsLab) from the Powershellgallery.
 
 1. Log in as **LabAdmin** on the AdminPC.
 2. Run:
