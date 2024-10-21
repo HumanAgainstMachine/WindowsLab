@@ -4,6 +4,8 @@
     WindowsLab, tools to admin a Windows based Lab
 #>
 
+# -- Init Module Vars ---
+
 # Get this script name without extension
 $thisModuleName = [System.IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Path)
 
@@ -11,28 +13,127 @@ $thisModuleName = [System.IO.Path]::GetFileNameWithoutExtension($MyInvocation.My
 New-Item -Path $env:LOCALAPPDATA -Name "$thisModuleName" -ItemType Directory -ErrorAction SilentlyContinue
 $configPath = Join-Path $env:LOCALAPPDATA $thisModuleName 'config.json'
 
-# Create an empty config.json file if not exist
+# Create empty config.json if not exist
 if (-not (Test-Path -Path $configPath -PathType Leaf)) {
-    # Empty JSON structure
     $emptyJson = @{
         labPcNames = @()
         labPcMacs  = @()
     }
-    
     # Convert and save to JSON file
     $emptyJson | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
+} 
+
+# Import config.json
+$config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
+
+# -- End Init Vars --
+
+function Test-NoLabPcName {
+    # Test if LabPc names are not set in config.json
+    param ()
+    if ($config.labPcNames.Length -eq 0) {
+        Write-Host ">>> LabPc names not found <<<" -ForegroundColor Red
+        Write-Host "Run Set-LabPcName to set LabPc names" -ForegroundColor DarkYellow
+        Exit 0
+    }    
 }
 
-$config = $null # Script (module) scope variable
-
-function Watch-LabPcName {
-    $script:config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
+function Set-LabPcName {# the GUI cmdlet
+    <#
+    .SYNOPSIS
+        GUI to manage LabPcs names
     
-    if ($script:config.labPcNames.Length -eq 0) {
-        Write-Host "LabPc names not found. " -ForegroundColor Red
-        Write-Host "Run Set-LabPcName to set LabPc names,then open a new shell and try again."
-        Exit 126 # Command invoked cannot execute
-    }
+    .DESCRIPTION
+        Allows to set/update config.json file through a GUI
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    # Load the Windows Forms assembly
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    # Create the form
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Lab Settings"
+    $form.Size = New-Object System.Drawing.Size(500, 175)  # Reduced height
+
+    # Create a label for the computer names
+    $labelNames = New-Object System.Windows.Forms.Label
+    $labelNames.Text = "Set LabPcs Names (comma-separated):"
+    $labelNames.AutoSize = $true
+    $labelNames.Location = New-Object System.Drawing.Point(10, 10)
+    $form.Controls.Add($labelNames)
+
+    # Create a TextBox to display and edit the computer names
+    $textboxNames = New-Object System.Windows.Forms.TextBox
+    $textboxNames.Multiline = $false
+    $textboxNames.ScrollBars = 'Horizontal'
+    $textboxNames.Size = New-Object System.Drawing.Size(465, 30)  # Increased width
+    $textboxNames.Location = New-Object System.Drawing.Point(10, 35)
+    $form.Controls.Add($textboxNames)
+
+    # Create Save button
+    $saveButton = New-Object System.Windows.Forms.Button
+    $saveButton.Text = "Save"
+    $saveButton.Location = New-Object System.Drawing.Point(10, 100)  # Moved buttons down to create more room
+    $form.Controls.Add($saveButton)
+
+    # Create a status label for success/failure messages
+    $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.AutoSize = $true
+    $statusLabel.Location = New-Object System.Drawing.Point(10, 75)
+    $form.Controls.Add($statusLabel)
+
+    
+    # Save JSON function
+    $saveButton.Add_Click({
+        try {
+            # Get the updated computer names from the textbox (comma-separated)
+            $newNames = $textboxNames.Text -split ",\s*"
+            
+            # Silently remove empty values
+            $newNames = $newNames | Where-Object { $_ -ne "" }
+            
+            # Cast to array to avoid PowerShell treating a single element as a string
+            $newNames = $newNames -as [System.Array]
+            
+            # Update the 'labPcNames' key with new values
+            $script:config.labPcNames = $newNames
+            
+            # Save the updated JSON back to the file
+            $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
+            
+            # Show success message in green
+            $statusLabel.Text = "Settings saved successfully."
+            $statusLabel.ForeColor = 'Green'
+            
+        } catch {
+            # Show error message in red
+            $statusLabel.Text = "Failed to save settings."
+            $statusLabel.ForeColor = 'Red'
+        }
+    })
+
+    # Display config content as soon as the form pops up
+    $form.Add_Shown({
+        try {
+            # Extract and display values from the 'labPcNames' key (array of values)
+            $names = $config.labPcNames -join ", "
+            $textboxNames.Text = $names
+            
+            # Clear status label on successful load
+            $statusLabel.Text = ""
+            
+        } catch {
+            # Show error message in red
+            $statusLabel.Text = "Failed to load JSON."
+            $statusLabel.ForeColor = 'Red'
+        }
+    })
+
+    # Show the form
+    $form.ShowDialog()
 }
 
 
@@ -49,8 +150,8 @@ function Test-LabPcPrompt {
     #>
     [CmdletBinding()]
     param ()
-    Watch-LabPcName
 
+    Test-NoLabPcName
     foreach ($pc in $script:config.labPcNames) {
         try {
             Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
@@ -79,7 +180,8 @@ function Sync-LabPcDate {
     #>
     [CmdletBinding()]
     param ()
-    Watch-LabPcName
+
+    Test-NoLabPcName
 
     # check if NtpTime module is installed
     if ($null -eq (Get-Module -ListAvailable -Name NtpTime)) {
@@ -121,7 +223,7 @@ function Deploy-Item {
         [string]$UserName        
     )
 
-    Watch-LabPcName
+    Test-NoLabPcName
     Resolve-Path -Path $Path -ErrorAction Stop | Out-Null
 
     $script:config.labPcNames | ForEach-Object -Parallel {
@@ -178,7 +280,7 @@ function Disconnect-User {
     [CmdletBinding()]
     param()
 
-    Watch-LabPcName
+    Test-NoLabPcName
     Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope
         try {
@@ -229,7 +331,7 @@ function New-LabUser {
       [string]$UserName
     )
 
-    Watch-LabPcName
+    Test-NoLabPcName
     Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         try {
             $blankPassword = [securestring]::new()
@@ -266,7 +368,7 @@ function Remove-LabUser {
       [string]$UserName
     )
 
-    Watch-LabPcName
+    Test-NoLabPcName
     Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
         try {
             # check if quser command exist
@@ -333,7 +435,7 @@ function Set-LabUser {
         [switch]$RestoreDesktop
     )
 
-    Watch-LabPcName
+    Test-NoLabPcName
     switch ($PSCmdlet.ParameterSetName) {
         'Set0' {$password = $null
                 if ($SetPassword.IsPresent) {
@@ -380,13 +482,10 @@ function Set-LabUser {
 
 function Backup-LabUserDesktop {
     <#
-    .SYNOPSIS
         Back up LabUser desktop into ROOT:\LabPc folder
 
-    .DESCRIPTION
         This cmdlet copies LabUser desktop files and folders into into ROOT:|LabPc folder and deletes any previous item.
 
-    .EXAMPLE
         Backup-LabUserDesktop -UserName Alunno
     #>
     [CmdletBinding()]
@@ -429,14 +528,9 @@ function Backup-LabUserDesktop {
 
 function Restore-LabUserDesktop {
     <#
-    .SYNOPSIS
         Restore LabUser desktop backup from ROOT:\LabPc 
 
-    .DESCRIPTION
         This cmdlet copies back the LabUser desktop backup from ROOT:\LabPc folder, overwrite any existing items.
-
-    .EXAMPLE
-        Restore-LabUserDesktop -UserName Alunno
     #>
     [CmdletBinding()]
     param(
@@ -484,10 +578,10 @@ function Show-LabPcMac {
         Start-LabPc cmdlet, 
     #>
 
-    Watch-LabPcName
+    Test-NoLabPcName
     Write-Host "Searching for physical, connected, ethernet net adapter MAC addresses ..." -ForegroundColor DarkYellow
     $MACs = @()
-    $script:config.labPcNames | ForEach-Object {
+    $config.labPcNames | ForEach-Object {
         try {
             Write-Host "$_ " -ForegroundColor DarkYellow -NoNewline
             # Search for Physical, connected (Up), ethernet (standard 802.3) adapter
@@ -514,9 +608,9 @@ function Show-LabPcMac {
     }
 
     $script:config.labPcMacs = $MACs
-    if ($script:config.labPcNames.Length -eq $script:config.labPcMacs.Length) {
+    if ($config.labPcNames.Length -eq $config.labPcMacs.Length) {
         # Save the updated JSON back to the file
-        $script:config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
+        $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
         Write-Host "MAC addresses saved for use with Start-LabPc cmdlet." -ForegroundColor DarkYellow
     }
     else {
@@ -538,9 +632,8 @@ function Start-LabPc {
     [CmdletBinding(SupportsShouldProcess)]
     param ()
 
-    Watch-LabPcName
-
-    Write-Host "Start-LabPc works only if Computers support WoL. See documentation for details." -ForegroundColor DarkYellow
+    Test-NoLabPcName
+    Write-Host "Start-LabPc works only if LabPcs support WoL." -ForegroundColor DarkYellow
 
     if ($script:config.labPcNames.Length -eq $script:config.labPcMacs.Length) {
         # send Magic Packet over LAN
@@ -554,7 +647,7 @@ function Start-LabPc {
         }
     } 
     else {
-        Write-Host "MAC address and computer name count mismatch. Run Show-LabPcMac to fix." -ForegroundColor Red
+        Write-Host "MAC address and LabPcs names count mismatch. Run Show-LabPcMac to fix it." -ForegroundColor Red
     }
 }
 
@@ -583,7 +676,7 @@ function Stop-LabPc {
         [switch]$AndRestart # Restart LabPcs
     )
 
-    Watch-LabPcName
+    Test-NoLabPcName
     switch ($PSCmdlet.ParameterSetName) {
         'Set0' {Stop-Computer -ComputerName $script:config.labPcNames -Force} # no parameter provided
         'Set1' {Get-LabPcStop} # -When provided
@@ -595,13 +688,9 @@ function Stop-LabPc {
 
 function Restart-LabPc {
     <#
-    .SYNOPSIS
         Force an immediate restart of each computer and wait for them to be on again
 
-    .EXAMPLE
         Restart-LabPc
-
-    .NOTES
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param()
@@ -611,13 +700,10 @@ function Restart-LabPc {
 
 function New-LabPcStop {
     <#
-    .SYNOPSIS
         Schedule a new LabPC daily stop
 
-    .DESCRIPTION
         This cmdlet creates the new task StopThisComputer and if the task already exist, just adds the new stop time as a trigger to the task
 
-    .EXAMPLE
         New-LabPcStop -DailyTime '14:15'
     #>
     [CmdletBinding(SupportsShouldProcess)]
@@ -682,13 +768,10 @@ function New-LabPcStop {
 
 function Get-LabPcStop {
     <#
-    .SYNOPSIS
         Gets LabPC daily stops
 
-    .DESCRIPTION
         This cmdlet gets all trigger times for StopThisComputer scheduled task
 
-    .EXAMPLE
         Get-LabPcStop
     #>
     [CmdletBinding()]
@@ -725,13 +808,10 @@ function Get-LabPcStop {
 
 function Remove-LabPcStop {
     <#
-    .SYNOPSIS
         Removes a LabPC daily stop
 
-    .DESCRIPTION
         This cmdlet removes if exist the trigger from StopThisComputer scheduled task with time -DailyTime
 
-    .EXAMPLE
         Remove-LabPcStop -DailyTime '14:14'
     #>
     [CmdletBinding(SupportsShouldProcess)]
@@ -788,128 +868,5 @@ function Remove-LabPcStop {
             Write-Host "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
         }
 
-    }
-}
-
-
-# -- GUI --
-
-function Set-LabPcName {
-    <#
-    .SYNOPSIS
-        GUI to manage LabPcs names
-    
-    .DESCRIPTION
-        Allows to set/update config.json file through a GUI
-    #>
-    [CmdletBinding(SupportsShouldProcess)]
-    param()
-
-    # Load the Windows Forms assembly
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-
-    # Create the form
-    $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Lab Settings"
-    $form.Size = New-Object System.Drawing.Size(500, 175)  # Reduced height
-
-    # Create a label for the computer names
-    $labelNames = New-Object System.Windows.Forms.Label
-    $labelNames.Text = "Set LabPcs Names (comma-separated):"
-    $labelNames.AutoSize = $true
-    $labelNames.Location = New-Object System.Drawing.Point(10, 10)
-    $form.Controls.Add($labelNames)
-
-    # Create a TextBox to display and edit the computer names
-    $textboxNames = New-Object System.Windows.Forms.TextBox
-    $textboxNames.Multiline = $false
-    $textboxNames.ScrollBars = 'Horizontal'
-    $textboxNames.Size = New-Object System.Drawing.Size(465, 30)  # Increased width
-    $textboxNames.Location = New-Object System.Drawing.Point(10, 35)
-    $form.Controls.Add($textboxNames)
-
-    # Create Save button
-    $saveButton = New-Object System.Windows.Forms.Button
-    $saveButton.Text = "Save"
-    $saveButton.Location = New-Object System.Drawing.Point(10, 100)  # Moved buttons down to create more room
-    $form.Controls.Add($saveButton)
-
-    # Create Refresh button
-    $refreshButton = New-Object System.Windows.Forms.Button
-    $refreshButton.Text = "Refresh"
-    $refreshButton.Location = New-Object System.Drawing.Point(100, 100)  # Moved buttons down to create more room
-    $form.Controls.Add($refreshButton)
-
-    # Create a status label for success/failure messages
-    $statusLabel = New-Object System.Windows.Forms.Label
-    $statusLabel.AutoSize = $true
-    $statusLabel.Location = New-Object System.Drawing.Point(10, 75)
-    $form.Controls.Add($statusLabel)
-
-    
-    # Save JSON function
-    $saveButton.Add_Click({
-        try {
-            # Get the updated computer names from the textbox (comma-separated)
-            $newNames = $textboxNames.Text -split ",\s*"
-            
-            # Silently remove empty values
-            $newNames = $newNames | Where-Object { $_ -ne "" }
-            
-            # Cast to array to avoid PowerShell treating a single element as a string
-            $newNames = $newNames -as [System.Array]
-            
-            # Load the original JSON, update the 'labPcNames' key with new values
-            $script:config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
-            $script:config.labPcNames = $newNames
-            
-            # Save the updated JSON back to the file
-            $script:config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-            
-            # Show success message in green
-            $statusLabel.Text = "Settings saved successfully."
-            $statusLabel.ForeColor = 'Green'
-            
-        } catch {
-            # Show error message in red
-            $statusLabel.Text = "Failed to save settings."
-            $statusLabel.ForeColor = 'Red'
-        }
-    })
-
-    # Refresh function (reloading JSON)
-    $refreshButton.Add_Click({
-        Import-JsonContent
-    })
-
-    # Load the JSON content as soon as the form pops up
-    $form.Add_Shown({
-        Import-JsonContent      # Then load the content
-    })
-
-    # Show the form
-    $form.ShowDialog()
-
-
-}
-
-# Function to load JSON content
-function Import-JsonContent {
-    try {
-        # Read the JSON file content
-        $script:config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
-        
-        # Extract and display values from the 'labPcNames' key (array of values)
-        $names = $script:config.labPcNames -join ", "
-        $textboxNames.Text = $names
-        
-        # Clear status label on successful load
-        $statusLabel.Text = ""
-        
-    } catch {
-        # Show error message in red
-        $statusLabel.Text = "Failed to load JSON."
-        $statusLabel.ForeColor = 'Red'
     }
 }
