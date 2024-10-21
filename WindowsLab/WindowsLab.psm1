@@ -4,10 +4,14 @@
     WindowsLab, tools to admin a Windows based Lab
 #>
 
-# Get path to config.json
-$configPath = Join-Path -Path $PSScriptRoot -ChildPath 'config.json'
+# Get this script name without extension
+$thisModuleName = [System.IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Path)
 
-# Create an empty config.json file if missing
+# Set path to $HOME\AppData\Local\config.json 
+New-Item -Path $env:LOCALAPPDATA -Name "$thisModuleName" -ItemType Directory -ErrorAction SilentlyContinue
+$configPath = Join-Path $env:LOCALAPPDATA $thisModuleName 'config.json'
+
+# Create an empty config.json file if not exist
 if (-not (Test-Path -Path $configPath -PathType Leaf)) {
     # Empty JSON structure
     $emptyJson = @{
