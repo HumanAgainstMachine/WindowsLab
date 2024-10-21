@@ -579,7 +579,7 @@ function Show-LabPcMac {
     #>
 
     Test-NoLabPcName
-    Write-Host "Searching for physical, connected, ethernet net adapter MAC addresses ..." -ForegroundColor DarkYellow
+    Write-Host "Searching for physical, connected, Ethernet adapter MAC addresses ..." -ForegroundColor DarkYellow
     $MACs = @()
     $config.labPcNames | ForEach-Object {
         try {
@@ -589,13 +589,16 @@ function Show-LabPcMac {
             Where-Object {
                 $_.Status -eq "Up" -and ($_.PhysicalMediaType -like "*802.3*" -or $_.Name -like "*Ethernet*")
             } | Select-Object MacAddress 
-                        
-            if ($netAdapter.Length -eq 1) { # Found one case
+
+            if ($netAdapter.Length -eq 0) {# Found zero
+                Write-Host "does not have a connected Ethernet adapter. Please connect one."
+            }
+            elseif ($netAdapter.Length -eq 1) {# Found one 
                 $MACs += $netAdapter.MacAddress
                 Write-Host $netAdapter.MacAddress
             }
-            else { # Found more then one case
-                Write-Host "seams to have multiple ethernet net adapters, disconnect all but one" -NoNewline
+            else { # Found more then one 
+                Write-Host "appears to have multiple Ethernet adapters. Disconnect all but one" -NoNewline
                 Write-Host $netAdapter.MacAddress -Separator ', ' 
             }
          
@@ -603,7 +606,7 @@ function Show-LabPcMac {
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # Found none case
             Write-Host "Not yet reachable " -ForegroundColor Red -NoNewline
-            Write-Host "(is computer on and connected via ethernet?)" -ForegroundColor DarkYellow
+            Write-Host "(is this LabPc powered on and connected via Ethernet?)" -ForegroundColor  DarkRed
         }
     }
 
@@ -614,7 +617,7 @@ function Show-LabPcMac {
         Write-Host "MAC addresses saved for use with Start-LabPc cmdlet." -ForegroundColor DarkYellow
     }
     else {
-        Write-Host "Fix network adapter issues before using MAC addresses with Start-LabPc cmdlet." -ForegroundColor Red
+        Write-Host "Resolve network adapter issues before using MAC addresses with the Start-LabPc cmdlet." -ForegroundColor DarkYellow
     }
 }
 
