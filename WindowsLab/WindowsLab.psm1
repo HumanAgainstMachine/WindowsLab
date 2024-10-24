@@ -579,7 +579,7 @@ function Show-LabPcMac {
     #>
 
     Test-NoLabPcName
-    Write-Host "Searching for physical, connected, Ethernet adapter MAC addresses ..." -ForegroundColor DarkYellow
+    Write-Host "Searching for MAC addresses of physically connected Ethernet adapters ..." -ForegroundColor DarkYellow
     $MACs = @()
     $config.labPcNames | ForEach-Object {
         try {
@@ -590,35 +590,33 @@ function Show-LabPcMac {
                 $_.Status -eq "Up" -and ($_.PhysicalMediaType -like "*802.3*" -or $_.Name -like "*Ethernet*")
             } | Select-Object MacAddress 
 
-            if ($netAdapter.Length -eq 0) {# Found zero
-                Write-Host "does not have a connected Ethernet adapter. Please connect one."
+            if ($netAdapter.Length -eq 0) {# Found 0
+                $MACs += $null
+                Write-Host "not connected via an Ethernet adapter. Please connect."
             }
-            elseif ($netAdapter.Length -eq 1) {# Found one 
+            elseif ($netAdapter.Length -eq 1) {# Found 1
                 $MACs += $netAdapter.MacAddress
                 Write-Host $netAdapter.MacAddress
             }
-            else { # Found more then one 
+            else { # Found more then 1
+                $MACs += $null
                 Write-Host "appears to have multiple Ethernet adapters. Disconnect all but one" -NoNewline
                 Write-Host $netAdapter.MacAddress -Separator ', ' 
             }
          
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-            # Found none case
+            $MACs += $null
             Write-Host "Not yet reachable " -ForegroundColor Red -NoNewline
             Write-Host "(is this LabPc powered on and connected via Ethernet?)" -ForegroundColor  DarkRed
         }
     }
 
     $script:config.labPcMacs = $MACs
-    if ($config.labPcNames.Length -eq $config.labPcMacs.Length) {
-        # Save the updated JSON back to the file
-        $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-        Write-Host "MAC addresses saved for use with Start-LabPc cmdlet." -ForegroundColor DarkYellow
-    }
-    else {
-        Write-Host "Resolve network adapter issues before using MAC addresses with the Start-LabPc cmdlet." -ForegroundColor DarkYellow
-    }
+    # Save the updated JSON back to the file
+    $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
+    Write-Host "Found MAC addresses saved for use with Start-LabPc cmdlet." -ForegroundColor DarkYellow
+
 }
 
 function Start-LabPc {
@@ -636,22 +634,26 @@ function Start-LabPc {
     param ()
 
     Test-NoLabPcName
-    Write-Host "Start-LabPc works only if LabPcs support WoL." -ForegroundColor DarkYellow
+    Write-Host "Remember, Start-LabPc works only if the LabPCs support WoL (Wake-on-LAN)." -ForegroundColor DarkYellow
 
-    if ($script:config.labPcNames.Length -eq $script:config.labPcMacs.Length) {
-        # send Magic Packet over LAN
-        foreach ($Mac in $script:config.labPcMacs) {
+    # Send Magic Packet over LAN
+    for ($i = 0; $i -lt $config.labPcNames.Count; $i++) {
+        $PcName = $config.labPcNames[$i]
+        $Mac = $config.labPcMacs[$i]
+        if ($Mac) {
             $MacByteArray = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
             [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
             $UdpClient = New-Object System.Net.Sockets.UdpClient
             $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
-            $UdpClient.Send($MagicPacket,$MagicPacket.Length)
+            $UdpClient.Send($MagicPacket,$MagicPacket.Length) | Out-Null
             $UdpClient.Close()
+            Write-Host $PcName, "Started" -ForegroundColor Green
         }
-    } 
-    else {
-        Write-Host "MAC address and LabPcs names count mismatch. Run Show-LabPcMac to fix it." -ForegroundColor Red
+        else {
+            Write-Host $PcName, "Missing MAC Address. Run Show-LabPcMac for more information." -ForegroundColor Red
+        }
     }
+
 }
 
 function Stop-LabPc {
