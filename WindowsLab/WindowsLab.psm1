@@ -571,52 +571,58 @@ function Restore-LabUserDesktop {
 function Show-LabPcMac {
     <#
     .SYNOPSIS
-        Show info about ethernet ComputerLab MAC addresses
+        Show info about Ethernet PcLab MAC addresses.
     
     .DESCRIPTION
-        Show-LabPcMac searchs for Ethernet (wired LAN) MAC addresses for later use with WoL in 
-        Start-LabPc cmdlet, 
+        Show-LabPcMac searches for LabPC Ethernet MAC addresses. When 
+        a MAC address is found, it is saved to the configuration file. 
+        MAC addresses are required for the Start-LabPc cmdlet to use 
+        Wake-on-LAN (WoL). 
     #>
 
     Test-NoLabPcName
     Write-Host "Searching for MAC addresses of physically connected Ethernet adapters ..." -ForegroundColor DarkYellow
-    $MACs = @()
+    $foundMacs = @()
     $config.labPcNames | ForEach-Object {
         try {
-            Write-Host "$_ " -ForegroundColor DarkYellow -NoNewline
+            Write-Host $_ "" -ForegroundColor DarkYellow -NoNewline
+
             # Search for Physical, connected (Up), ethernet (standard 802.3) adapter
-            $netAdapter = Get-NetAdapter -Physical -CimSession $_ |
+            $netAdapter = Get-NetAdapter -Physical -CimSession $_ -ErrorAction Stop |
             Where-Object {
                 $_.Status -eq "Up" -and ($_.PhysicalMediaType -like "*802.3*" -or $_.Name -like "*Ethernet*")
             } | Select-Object MacAddress 
 
-            if ($netAdapter.Length -eq 0) {# Found 0
-                $MACs += $null
-                Write-Host "not connected via an Ethernet adapter. Please connect."
+            if ($netAdapter.Length -eq 0) {
+                # Connected, but not via an Ethernet adapter.
+                $foundMacs += $null
+                Write-Host "is not connected via an Ethernet adapter. Please connect."
             }
-            elseif ($netAdapter.Length -eq 1) {# Found 1
-                $MACs += $netAdapter.MacAddress
+            elseif ($netAdapter.Length -eq 1) {
+                # Connected via an Ethernet adapter.
+                $foundMacs += $netAdapter.MacAddress
                 Write-Host $netAdapter.MacAddress
             }
-            else { # Found more then 1
-                $MACs += $null
-                Write-Host "appears to have multiple Ethernet adapters. Disconnect all but one" -NoNewline
-                Write-Host $netAdapter.MacAddress -Separator ', ' 
+            else { 
+                # Connected via multiple adapters, including Ethernet.
+                $foundMacs += $null
+                Write-Host "appears to have multiple Ethernet adapters. Disconnect all but one" 
+                Write-Host $netAdapter.MacAddress -Separator ', '
             }
          
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-            $MACs += $null
-            Write-Host "Not yet reachable " -ForegroundColor Red -NoNewline
-            Write-Host "(is this LabPc powered on and connected via Ethernet?)" -ForegroundColor  DarkRed
+            # LabPC is unreachable because it is either off, not connected, or not ready.
+            $foundMacs += $null
+            Write-Host "is unreachable because it is either off, not connected, or not ready."
         }
     }
 
-    $script:config.labPcMacs = $MACs
-    # Save the updated JSON back to the file
-    $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-    Write-Host "Found MAC addresses saved for use with Start-LabPc cmdlet." -ForegroundColor DarkYellow
+    $Script:config.labPcMacs = $foundMacs
 
+    # Save to JSON file
+    $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
+    Write-Host "`nFound MAC addresses have been saved and are available for the Start-LabPc cmdlet.`nTo retrieve any missing MAC addresses, please resolve the issues above and rerun this cmdlet."
 }
 
 function Start-LabPc {
