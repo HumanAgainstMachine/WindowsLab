@@ -13,25 +13,32 @@ try {
 ---------------------
 "@ -ForegroundColor DarkYellow
 
+    # Update Winget
+    Write-Host "Trying to update Winget ...`n" -ForegroundColor DarkYellow
     winget upgrade winget
-    Write-Host "Winget is OK.`n" -ForegroundColor DarkYellow
 
+    # Update Powershell
+    Write-Host "Trying to update Powershell 7 ...`n" -ForegroundColor DarkYellow
     winget install --id Microsoft.Powershell --source winget 
-    Write-Host "Powershell 7 or later is installed.`n" -ForegroundColor DarkYellow
-    
-    $netAdapter = Get-NetAdapter -Physical -CimSession $env:COMPUTERNAME | 
-                    Where-Object {$_.Status -eq "Up"} -ErrorAction Stop
-    
-    Write-Host "Found phiscal connected net adapter:" -ForegroundColor DarkYellow
-    $netAdapter | Format-Table -Property Name, InterfaceIndex, Status
-    
-    Set-NetConnectionProfile -InterfaceIndex $netAdapter.InterfaceIndex -NetworkCategory Private -ErrorAction Stop
-    Write-Host "Network set to private.`n" -ForegroundColor DarkYellow
 
-    Enable-PSRemoting -WarningAction SilentlyContinue
-    Write-Host "PowerShell Remoting enabled.`n" -ForegroundColor DarkYellow
-    
-    Write-Host "This PC ($env:COMPUTERNAME) is now ready!" -ForegroundColor Green
+    # Set Network(s) to Private
+    Write-Host "Trying to set Network to private ...`n" -ForegroundColor DarkYellow
+    Set-NetConnectionProfile -NetworkCategory Private
+
+    $privateNetProfiles = Get-NetConnectionProfile | Where-Object {$_.NetworkCategory -eq "Private"}
+
+    if ($null -eq $privateNetProfiles) {
+        Write-Host "You are not connected to any Network!" -ForegroundColor Red        
+    }
+    elseif ($privateNetProfiles.Name.Count -eq 1) {
+        Write-Host "Trying to enable PowerShell Remoting ...`n" -ForegroundColor DarkYellow
+        Enable-PSRemoting -WarningAction SilentlyContinue
+        
+        Write-Host "This PC ($env:COMPUTERNAME) is now ready!" -ForegroundColor Green
+    } 
+    else {
+        Write-Host "This PC ($env:COMPUTERNAME) is connected to more than one Networks, disable all but one" -ForegroundColor Red
+    }
 }
 catch {
     Write-Host "Something went wrong" -ForegroundColor Red
