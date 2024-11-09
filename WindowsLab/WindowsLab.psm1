@@ -9,32 +9,30 @@
 # Get this script name without extension
 $thisModuleName = [System.IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Path)
 
-# Set path to $HOME\AppData\Local\config.json 
-New-Item -Path $env:LOCALAPPDATA -Name "$thisModuleName" -ItemType Directory -ErrorAction SilentlyContinue
-$configPath = Join-Path $env:LOCALAPPDATA $thisModuleName 'config.json'
+# Set path to $HOME\AppData\Roaming\config.json 
+New-Item -Path $env:APPDATA -Name "$thisModuleName" -ItemType Directory -ErrorAction SilentlyContinue
+$configPath = Join-Path $env:APPDATA $thisModuleName 'config.json'
+$selectedIconPath = Join-Path -Path $PSScriptRoot -ChildPath "selectedTab.ico"
 
-# Create empty config.json if not exist
-if (-not (Test-Path -Path $configPath -PathType Leaf)) {
-    $emptyJson = @{
-        labPcNames = @()
-        labPcMacs  = @()
-    }
-    # Convert and save to JSON file
-    $emptyJson | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-} 
-
-# Import config.json
-$config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
+if (Test-Path -Path $configPath -PathType Leaf) {
+    # Import config.json
+    $config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
+    $currentLab = $config.Labs[$config.LastSelectedLab]
+}
+else {
+    $currentLab = $null
+}
 
 # -- End Init Vars --
 
 function Test-NoLabPcName {
     # Test if LabPc names are not set in config.json
     param ()
-    if ($config.labPcNames.Length -eq 0) {
+    if ($currentlab.PcNames.Length -eq 0) {
         Write-Host ">>> LabPc names not found <<<" -ForegroundColor Red
         Write-Host "Run Set-LabPcName to set LabPc names" -ForegroundColor DarkYellow
-        Exit 0
+        # Exit 0
+        break
     }    
 }
 
@@ -48,90 +46,299 @@ function Set-LabPcName {# the GUI cmdlet
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param()
-
+ 
     # Load the Windows Forms assembly
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
-
+    
     # Create the form
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Lab Settings"
-    $form.Size = New-Object System.Drawing.Size(500, 175)  # Reduced height
-
-    # Create a label for the computer names
-    $labelNames = New-Object System.Windows.Forms.Label
-    $labelNames.Text = "Set LabPcs Names (comma-separated):"
-    $labelNames.AutoSize = $true
-    $labelNames.Location = New-Object System.Drawing.Point(10, 10)
-    $form.Controls.Add($labelNames)
-
-    # Create a TextBox to display and edit the computer names
-    $textboxNames = New-Object System.Windows.Forms.TextBox
-    $textboxNames.Multiline = $false
-    $textboxNames.ScrollBars = 'Horizontal'
-    $textboxNames.Size = New-Object System.Drawing.Size(465, 30)  # Increased width
-    $textboxNames.Location = New-Object System.Drawing.Point(10, 35)
-    $form.Controls.Add($textboxNames)
-
-    # Create Save button
-    $saveButton = New-Object System.Windows.Forms.Button
-    $saveButton.Text = "Save"
-    $saveButton.Location = New-Object System.Drawing.Point(10, 100)  # Moved buttons down to create more room
-    $form.Controls.Add($saveButton)
-
-    # Create a status label for success/failure messages
-    $statusLabel = New-Object System.Windows.Forms.Label
-    $statusLabel.AutoSize = $true
-    $statusLabel.Location = New-Object System.Drawing.Point(10, 75)
-    $form.Controls.Add($statusLabel)
-
+    $form.Text = "WindowsLab - Lab Settings"
+    $form.Size = New-Object System.Drawing.Size(800, 600)
+    $form.StartPosition = "CenterScreen"
     
-    # Save JSON function
-    $saveButton.Add_Click({
-        try {
-            # Get the updated computer names from the textbox (comma-separated)
-            $newNames = $textboxNames.Text -split ",\s*"
+    # Create TabControl
+    $tabControl = New-Object System.Windows.Forms.TabControl
+    $tabControl.Location = New-Object System.Drawing.Point(10, 10)
+    $tabControl.Size = New-Object System.Drawing.Size(765, 500)
+    $form.Controls.Add($tabControl)
+
+    # Create an ImageList, set icon size, and load an icon
+    $imageList = New-Object System.Windows.Forms.ImageList
+    $imageList.ImageSize = New-Object System.Drawing.Size(10, 10)
+    $imageList.Images.Add([System.Drawing.Image]::FromFile($selectedIconPath))
+
+    # Assign the ImageList to the TabControl
+    $tabControl.ImageList = $imageList
+    
+    # Create "Add Lab" button
+    $addLabButton = New-Object System.Windows.Forms.Button
+    $addLabButton.Location = New-Object System.Drawing.Point(10, 520)
+    $addLabButton.Size = New-Object System.Drawing.Size(100, 30)
+    $addLabButton.Text = "Add Lab"
+    $form.Controls.Add($addLabButton)
+    
+    # Create "Remove Lab" button
+    $removeLabButton = New-Object System.Windows.Forms.Button
+    $removeLabButton.Location = New-Object System.Drawing.Point(120, 520)
+    $removeLabButton.Size = New-Object System.Drawing.Size(100, 30)
+    $removeLabButton.Text = "Remove Lab"
+    $form.Controls.Add($removeLabButton)
+
+    # Add Save button
+    $saveNamesButton = New-Object System.Windows.Forms.Button
+    $saveNamesButton.Location = New-Object System.Drawing.Point(230, 520)
+    $saveNamesButton.Size = New-Object System.Drawing.Size(100, 30)
+    $saveNamesButton.Text = "Save"
+    $form.Controls.Add($saveNamesButton)    
+    
+    # Function to create embedded PowerShell console
+    function New-EmbeddedConsole {
+        param (
+            [System.Windows.Forms.Control]$parent,
+            [int]$x,
+            [int]$y,
+            [int]$width,
+            [int]$height
+        )
+        
+        $richTextBox = New-Object System.Windows.Forms.RichTextBox
+        $richTextBox.Location = New-Object System.Drawing.Point($x, $y)
+        $richTextBox.Size = New-Object System.Drawing.Size($width, $height)
+        $richTextBox.BackColor = [System.Drawing.Color]::Black
+        $richTextBox.ForeColor = [System.Drawing.ColorTranslator]::FromHtml("#45C4B0")
+        $richTextBox.Font = New-Object System.Drawing.Font("Consolas", 11)
+        $richTextBox.ReadOnly = $true
+        $richTextBox.Multiline = $true
+        $richTextBox.ScrollBars = "Vertical"
+        $richTextBox.WordWrap = $true
+        
+        $parent.Controls.Add($richTextBox)
+        return $richTextBox
+    }
+
+    function Update-Config {
+        <#
+        Update config module var (non-persistent memory)
+        #>
+        
+        $cfg = @{
+            Labs = @()
+            LastSelectedLab = $tabControl.SelectedIndex
+        }
+        
+        foreach ($tab in $tabControl.TabPages) {
+            $textField = $tab.Controls | Where-Object { $_ -is [System.Windows.Forms.TextBox] }
+            if ($textField.Text -eq "Enter comma separated LabPc Names") { $pcNames = "" } 
+            else { 
+                # Split up names to an array
+                $pcNames = $textField.Text -split ",\s*"
+
+                # Remove empty values
+                $pcNames = $pcNames | Where-Object {$_ -ne ""}
+
+                # Cast to array to avoid PowerShel treating a single name as a string
+                $pcNames = $pcNames -as [System.Array]
+            }
+
             
-            # Silently remove empty values
-            $newNames = $newNames | Where-Object { $_ -ne "" }
+            $cfg.Labs += @{
+                # Take valuse from GUI
+                Name = $tab.Text
+                PcNames = $pcNames
+                # Keep PcMacs if exist
+                PcMacs = if ($config.Labs[$tab.TabIndex]) {$config.Labs[$tab.TabIndex].PcMacs} else {''}
+            }
+        }
+
+        $Script:config = $cfg
+        $script:currentLab = $config.Labs[$config.LastSelectedLab]
+    }
+
+    # Function to create a new tab
+    function Add-NewTab {
+        param(
+            [string]$tabName = "",
+            [string]$textContent = ""
+        )
+        
+        # LabName mini input form
+        if ([string]::IsNullOrWhiteSpace($tabName)) {
+            $labNameForm = New-Object System.Windows.Forms.Form
+            $labNameForm.Text = "Enter Lab Name"
+            $labNameForm.Size = New-Object System.Drawing.Size(300, 150)
+            $labNameForm.StartPosition = "CenterScreen"
+    
+            $labNameField = New-Object System.Windows.Forms.TextBox
+            $labNameField.Location = New-Object System.Drawing.Point(10, 20)
+            $labNameField.Size = New-Object System.Drawing.Size(260, 20)
+            $labNameForm.Controls.Add($labNameField)
+    
+            $okButton = New-Object System.Windows.Forms.Button
+            $okButton.Location = New-Object System.Drawing.Point(100, 70)
+            $okButton.Size = New-Object System.Drawing.Size(75, 23)
+            $okButton.Text = "OK"
+            $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+            $labNameForm.Controls.Add($okButton)
+            $labNameForm.AcceptButton = $okButton
+    
+            $result = $labNameForm.ShowDialog()
+    
+            if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+                $tabName = $labNameField.Text
+                if ([string]::IsNullOrWhiteSpace($tabName)) {
+                    $randomLabName = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 3 | ForEach-Object { [char]$_ })
+                    $tabName = $randomLabName
+                }
+            } else {
+                return
+            }
+        }
+    
+        # Create new TabPage
+        $tabPage = New-Object System.Windows.Forms.TabPage
+        $tabPage.Text = $tabName
+    
+        # Add (single line) TextField to the tab 
+        $textField = New-Object System.Windows.Forms.TextBox
+        $textField.Multiline = $false
+        $textField.Location = New-Object System.Drawing.Point(10, 10)
+        $textField.Size = New-Object System.Drawing.Size(730, 20)
+        $textField.Text = $textContent
+        
+        # Add placeholder text to single-line field
+        if ([string]::IsNullOrWhiteSpace($textContent)) {
+            $textField.ForeColor = [System.Drawing.Color]::Gray
+            $textField.Text = "Enter comma separated LabPc Names"
+
+            $textField.Add_GotFocus({
+                if ($this.Text -eq "Enter comma separated LabPc Names") {
+                    $this.Text = ""
+                    $this.ForeColor = [System.Drawing.Color]::Black
+                }
+            })
             
-            # Cast to array to avoid PowerShell treating a single element as a string
-            $newNames = $newNames -as [System.Array]
+            $textField.Add_LostFocus({
+                if ([string]::IsNullOrWhiteSpace($this.Text)) {
+                    $this.Text = "Enter comma separated LabPc Names"
+                    $this.ForeColor = [System.Drawing.Color]::Gray
+                }
+            })
+        }
+        
+        $tabPage.Controls.Add($textField)
+    
+        # Add [Get MAcs] button to the tab
+        $showMacsButton = New-Object System.Windows.Forms.Button
+        $showMacsButton.Location = New-Object System.Drawing.Point(10, 40)
+        $showMacsButton.Text = "Get MACs"
+        $w = ($showMacsButton.Text.Length + 4)*6
+        $showMacsButton.Size = New-Object System.Drawing.Size($w, 25)
+        $tabPage.Controls.Add($showMacsButton)
+    
+        # Add embedded console to the tab
+        $console = New-EmbeddedConsole -parent $tabPage -x 10 -y 72 -width 730 -height 378
+    
+        # Get [MAcs button] click event
+        $showMacsButton.Add_Click({
+            if ($tabControl.TabCount -gt 0) {
+
+                $currentTab = $tabControl.SelectedTab
+                $console = $currentTab.Controls | Where-Object { $_ -is [System.Windows.Forms.RichTextBox] }
+                
+                # Clear previous output
+                $console.Clear()
+                
+                # Add new output
+                $console.AppendText("Lab $($currentLab.Name)")
+                if ($currentLab.PcNames) {
+                    $console.AppendText("`n`nSearching for MAC addresses of physically connected Ethernet adapters")
+                    $console.AppendText("`n`nWait ...`n")
+    
+                    # Display Get-LabPcMac output to console
+                    $output = Get-LabPcMac
+                    $console.AppendText($output)
+                }
+                else {
+                    $console.AppendText("`n`nFirst, enter the LabPC names, then save and press the [Get MACs] button again.")
+                }
+            }
+        })
+    
+        # Add the new tab to TabControl
+        $tabControl.TabPages.Add($tabPage)
+    }
+    
+    # Add Lab button click event
+    $addLabButton.Add_Click({
+        Add-NewTab
+        $tabControl.SelectedIndex = $tabControl.TabCount - 1
+        $tabControl.Focus() # move focus out of single-line field to see the placeholder text
+        Update-Config
+    })
+    
+    # Delete Lab button click event
+    $removeLabButton.Add_Click({
+        if ($tabControl.TabCount -gt 0) {
+            $currentTabName = $tabControl.SelectedTab.Text
+            $result = [System.Windows.Forms.MessageBox]::Show(
+                "Are you sure you want to remove '$currentTabName'?",
+                "Confirm Remove",
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Question)
             
-            # Update the 'labPcNames' key with new values
-            $script:config.labPcNames = $newNames
-            
-            # Save the updated JSON back to the file
-            $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-            
-            # Show success message in green
-            $statusLabel.Text = "Settings saved successfully."
-            $statusLabel.ForeColor = 'Green'
-            
-        } catch {
-            # Show error message in red
-            $statusLabel.Text = "Failed to save settings."
-            $statusLabel.ForeColor = 'Red'
+            if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+                $tabControl.TabPages.RemoveAt($tabControl.SelectedIndex)
+                Update-Config
+            }
         }
     })
 
-    # Display config content as soon as the form pops up
-    $form.Add_Shown({
-        try {
-            # Extract and display values from the 'labPcNames' key (array of values)
-            $names = $config.labPcNames -join ", "
-            $textboxNames.Text = $names
-            
-            # Clear status label on successful load
-            $statusLabel.Text = ""
-            
-        } catch {
-            # Show error message in red
-            $statusLabel.Text = "Failed to load JSON."
-            $statusLabel.ForeColor = 'Red'
+    # Save button click event
+    $saveNamesButton.Add_Click({
+        Update-Config
+        $config | ConvertTo-Json -Depth 3 | Set-Content -Path $configPath -Encoding UTF8
+        [System.Windows.Forms.MessageBox]::Show(
+            "LabPc Names saved!",
+            "Success",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information)
+    })    
+    
+    # Tab selection change event
+    $tabControl.Add_Selected({ # fires after tab change
+        # Remove Icon from the previuos selected tab if exist
+        if ($tabControl.TabPages[[Int32]$config.LastSelectedLab]) {
+            $tabControl.TabPages[[Int32]$config.LastSelectedLab].ImageIndex = -1
         }
-    })
 
+        # Add the icon for the new selected tab
+        if ($tabControl.SelectedTab) {
+            $tabControl.SelectedTab.ImageIndex = 0
+        }
+
+        Update-Config
+    })
+    
+    # Form closing event - save configuration
+    $form.Add_FormClosing({
+        Update-Config
+        $config | ConvertTo-Json -Depth 3 | Set-Content -Path $configPath -Encoding UTF8
+    })
+    
+    # Display tabs saved in config
+    if ($config -and $config.Labs) {
+        foreach ($tab in $config.Labs) {
+            Add-NewTab -tabName $tab.Name -textContent ($tab.PcNames -join ', ')
+        }
+        
+        # Restore last selected tab
+        $tabControl.SelectedIndex = $config.LastSelectedLab
+
+        # Add the icon for the new selected tab
+        $tabControl.TabPages[[Int32]$config.LastSelectedLab].ImageIndex = 0
+    }
+    
     # Show the form
     $form.ShowDialog()
 }
@@ -152,7 +359,7 @@ function Test-LabPcPrompt {
     param ()
 
     Test-NoLabPcName
-    foreach ($pc in $script:config.labPcNames) {
+    foreach ($pc in $currentlab.PcNames) {
         try {
             Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
             Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
@@ -197,7 +404,7 @@ function Sync-LabPcDate {
 
         Set-Date -Date $currentDate | Out-Null
         Write-Host "MasterComputer synchronized" -ForegroundColor Green
-        Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+        Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
             Set-Date -Date $Using:currentDate | Out-Null
             Write-Host "$env:computername synchronized" -ForegroundColor Green
         }
@@ -226,7 +433,7 @@ function Deploy-Item {
     Test-NoLabPcName
     Resolve-Path -Path $Path -ErrorAction Stop | Out-Null
 
-    $script:config.labPcNames | ForEach-Object -Parallel {
+    $currentlab.PcNames | ForEach-Object -Parallel {
         $session = New-PSSession -ComputerName $_
         $labUserprofilePath = Invoke-Command -Session $session -ScriptBlock {
             param($UName)
@@ -281,7 +488,7 @@ function Disconnect-User {
     param()
 
     Test-NoLabPcName
-    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope
         try {
             # check if quser command exist
@@ -332,7 +539,7 @@ function New-LabUser {
     )
 
     Test-NoLabPcName
-    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
         try {
             $blankPassword = [securestring]::new()
             New-LocalUser -Name $Using:UserName -Password $blankPassword -PasswordNeverExpires `
@@ -369,7 +576,7 @@ function Remove-LabUser {
     )
 
     Test-NoLabPcName
-    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
         try {
             # check if quser command exist
             Get-Command -Name quser -ErrorAction Stop | Out-Null
@@ -442,7 +649,7 @@ function Set-LabUser {
                     # Prompt and read new password
                     $password = Read-Host -Prompt 'Enter the new password' -AsSecureString
                 }
-                Invoke-Command -ComputerName $script:config.labPcNames  -ScriptBlock {
+                Invoke-Command -ComputerName $currentlab.PcNames  -ScriptBlock {
                     try {
                         if ($Using:SetPassword.IsPresent) {
                             # change password
@@ -493,7 +700,7 @@ function Backup-LabUserDesktop {
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName
     )
-    invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -537,7 +744,7 @@ function Restore-LabUserDesktop {
         [Parameter(Mandatory=$True, HelpMessage="Enter LabUser name")]
         [string]$UserName
     )
-    invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -568,24 +775,22 @@ function Restore-LabUserDesktop {
 
 # -- LabPc section --
 
-function Show-LabPcMac {
+function Get-LabPcMac {
     <#
     .SYNOPSIS
-        Show info about Ethernet PcLab MAC addresses.
+        Show info into GUI console about Ethernet PcLab MAC addresses.
     
     .DESCRIPTION
-        Show-LabPcMac searches for LabPC Ethernet MAC addresses. When 
+        Get-LabPcMac searches for LabPC Ethernet MAC addresses. When 
         a MAC address is found, it is saved to the configuration file. 
         MAC addresses are required for the Start-LabPc cmdlet to use 
         Wake-on-LAN (WoL). 
     #>
 
-    Test-NoLabPcName
-    Write-Host "Searching for MAC addresses of physically connected Ethernet adapters ..." -ForegroundColor DarkYellow
     $foundMacs = @()
-    $config.labPcNames | ForEach-Object {
+    $currentlab.PcNames | ForEach-Object {
         try {
-            Write-Host $_ "" -ForegroundColor DarkYellow -NoNewline
+            Write-Output "`n$_"
 
             # Search for Physical, connected (Up), ethernet (standard 802.3) adapter
             $netAdapter = Get-NetAdapter -Physical -CimSession $_ -ErrorAction Stop |
@@ -596,33 +801,37 @@ function Show-LabPcMac {
             if ($netAdapter.Length -eq 0) {
                 # Connected, but not via an Ethernet adapter.
                 $foundMacs += $null
-                Write-Host "is not connected via an Ethernet adapter. Please connect."
+                Write-Output "is not connected via an Ethernet adapter. Please connect."
             }
             elseif ($netAdapter.Length -eq 1) {
                 # Connected via an Ethernet adapter.
                 $foundMacs += $netAdapter.MacAddress
-                Write-Host $netAdapter.MacAddress
+                Write-Output $netAdapter.MacAddress
             }
             else { 
                 # Connected via multiple adapters, including Ethernet.
                 $foundMacs += $null
-                Write-Host "appears to have multiple Ethernet adapters. Disconnect all but one" 
-                Write-Host $netAdapter.MacAddress -Separator ', '
+                Write-Output "appears to have multiple Ethernet adapters. Disconnect all but one." 
+                Write-Output $netAdapter.MacAddress -Separator ', '
             }
-         
+            
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # LabPC is unreachable because it is either off, not connected, or not ready.
             $foundMacs += $null
-            Write-Host "is unreachable because it is either off, not connected, or not ready."
+            Write-Output "is unreachable because it is either off, not connected, or not ready."
         }
     }
 
-    $Script:config.labPcMacs = $foundMacs
+    $script:currentLab.PcMacs = $foundMacs
+    $script:config.Labs[$config.LastSelectedLab] = $currentLab
 
     # Save to JSON file
     $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-    Write-Host "`nFound MAC addresses have been saved and are available for the Start-LabPc cmdlet.`nTo retrieve any missing MAC addresses, please resolve the issues above and rerun this cmdlet."
+    Write-Output @"
+`n`nFound MAC addresses have been saved and are available for the Start-LabPc cmdlet.
+To retrieve any missing MAC addresses, please resolve the issues above and press again [Get MACs] button.
+"@ 
 }
 
 function Start-LabPc {
@@ -643,9 +852,9 @@ function Start-LabPc {
     Write-Host "Remember, Start-LabPc works only if the LabPCs support WoL (Wake-on-LAN)." -ForegroundColor DarkYellow
 
     # Send Magic Packet over LAN
-    for ($i = 0; $i -lt $config.labPcNames.Count; $i++) {
-        $PcName = $config.labPcNames[$i]
-        $Mac = $config.labPcMacs[$i]
+    for ($i = 0; $i -lt $currentlab.PcNames.Count; $i++) {
+        $PcName = $currentlab.PcNames[$i]
+        $Mac = $currentlab.PcMacs[$i]
         if ($Mac) {
             $MacByteArray = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
             [Byte[]] $MagicPacket = (,0xFF * 6) + ($MacByteArray * 16)
@@ -656,7 +865,7 @@ function Start-LabPc {
             Write-Host $PcName, "Started" -ForegroundColor Green
         }
         else {
-            Write-Host $PcName, "Missing MAC Address. Run Show-LabPcMac for more information." -ForegroundColor Red
+            Write-Host $PcName, "is missing MAC Address. Press [Get MACs] button for more information." -ForegroundColor Red
         }
     }
 
@@ -689,7 +898,7 @@ function Stop-LabPc {
 
     Test-NoLabPcName
     switch ($PSCmdlet.ParameterSetName) {
-        'Set0' {Stop-Computer -ComputerName $script:config.labPcNames -Force} # no parameter provided
+        'Set0' {Stop-Computer -ComputerName $currentlab.PcNames -Force} # no parameter provided
         'Set1' {Get-LabPcStop} # -When provided
         'Set2' {New-LabPcStop -DailyTime $DailyAt} # -DailyAt provided
         'Set3' {Remove-LabPcStop -DailyTime $NoMoreAt} # -NoMoreAt provided
@@ -705,7 +914,7 @@ function Restart-LabPc {
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param()
-    Restart-Computer -ComputerName $script:config.labPcNames -Force
+    Restart-Computer -ComputerName $currentlab.PcNames -Force
 }
 
 
@@ -741,7 +950,7 @@ function New-LabPcStop {
     # Set the action
     $action = New-ScheduledTaskAction -Execute 'Powershell' -Argument '-NoProfile -ExecutionPolicy Bypass -Command "& {Stop-Computer -Force}"'
 
-    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
 
         # Set principal contex for SYSTEM account to run as a service with with the highest privileges
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
@@ -788,7 +997,7 @@ function Get-LabPcStop {
     [CmdletBinding()]
     param ()
 
-    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
 
         $formattedTime = "`n${env:COMPUTERNAME}:`n  "
         try {
@@ -843,7 +1052,7 @@ function Remove-LabPcStop {
     # Convert $DailyTimeObj to a TimeSpan object
     $dailyStopTime = $dailyTimeObj.TimeOfDay
 
-    Invoke-Command -ComputerName $script:config.labPcNames -ScriptBlock {
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
 
         try {
             # Get scheduled StopThisComputer task if exist
