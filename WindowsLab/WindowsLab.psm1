@@ -28,10 +28,10 @@ else {
 function Test-NoLabPcName {
     # Test if LabPc names are not set in config.json
     param ()
+    Write-Host "Selected Lab: $($currentLab.Name) `n"  -ForegroundColor DarkCyan
     if ($currentlab.PcNames.Length -eq 0) {
-        Write-Host ">>> LabPc names not found <<<" -ForegroundColor Red
-        Write-Host "Run Set-LabPcName to set LabPc names" -ForegroundColor DarkYellow
-        # Exit 0
+        Write-Host "LabPc names not found" -ForegroundColor Red
+        Write-Host "Run Set-LabPcName to set LabPc names`n" -ForegroundColor DarkYellow
         break
     }    
 }
@@ -129,7 +129,7 @@ function Set-LabPcName {# the GUI cmdlet
         
         foreach ($tab in $tabControl.TabPages) {
             $textField = $tab.Controls | Where-Object { $_ -is [System.Windows.Forms.TextBox] }
-            if ($textField.Text -eq "Enter comma separated LabPc Names") { $pcNames = "" } 
+            if ($textField.Text -eq "Enter comma separated LabPc Names") { $pcNames = @() } 
             else { 
                 # Split up names to an array
                 $pcNames = $textField.Text -split ",\s*"
@@ -137,17 +137,24 @@ function Set-LabPcName {# the GUI cmdlet
                 # Remove empty values
                 $pcNames = $pcNames | Where-Object {$_ -ne ""}
 
-                # Cast to array to avoid PowerShel treating a single name as a string
+                # Force PS treating a single name as an array
                 $pcNames = $pcNames -as [System.Array]
             }
 
+            $pcMacs = $config.Labs[$tab.TabIndex].PcMacs
+            if ($pcMacs) {
+                # Force PS treating a single MAC as an array
+                $pcMacs = $pcMacs -as [System.Array]
+            }
+            else {$pcMacs = @()}
+
             
             $cfg.Labs += @{
-                # Take valuse from GUI
+                # Take values from GUI
                 Name = $tab.Text
                 PcNames = $pcNames
-                # Keep PcMacs if exist
-                PcMacs = if ($config.Labs[$tab.TabIndex]) {$config.Labs[$tab.TabIndex].PcMacs} else {''}
+                # Keep saved MACs
+                PcMacs = $pcMacs
             }
         }
 
@@ -260,7 +267,7 @@ function Set-LabPcName {# the GUI cmdlet
                     $console.AppendText($output)
                 }
                 else {
-                    $console.AppendText("`n`nFirst, enter the LabPC names, then save and press the [Get MACs] button again.")
+                    $console.AppendText("`n`nFirst, enter the LabPC names, then press the [Get MACs] button again.")
                 }
             }
         })
@@ -787,6 +794,7 @@ function Get-LabPcMac {
         Wake-on-LAN (WoL). 
     #>
 
+    Update-Config
     $foundMacs = @()
     $currentlab.PcNames | ForEach-Object {
         try {
@@ -821,6 +829,9 @@ function Get-LabPcMac {
             $foundMacs += $null
             Write-Output "is unreachable because it is either off, not connected, or not ready."
         }
+        catch {
+            Write-Output $_.exception.GetType().fullname
+        }
     }
 
     $script:currentLab.PcMacs = $foundMacs
@@ -828,10 +839,10 @@ function Get-LabPcMac {
 
     # Save to JSON file
     $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-    Write-Output @"
-`n`nFound MAC addresses have been saved and are available for the Start-LabPc cmdlet.
-To retrieve any missing MAC addresses, please resolve the issues above and press again [Get MACs] button.
-"@ 
+    Write-Output "`n`nFound MAC addresses have been saved and are available for the Start-LabPc cmdlet."
+    if ($foundMacs -contains $null) {
+        Write-Output "`n`nTo retrieve missing MAC addresses, resolve the issues above and press again [Get MACs] button."
+    }
 }
 
 function Start-LabPc {
@@ -865,7 +876,8 @@ function Start-LabPc {
             Write-Host $PcName, "Started" -ForegroundColor Green
         }
         else {
-            Write-Host $PcName, "is missing MAC Address. Press [Get MACs] button for more information." -ForegroundColor Red
+            Write-Host $PcName, "is missing MAC Address." -ForegroundColor Red
+            Write-host "(Run Set-LabPcNames and press [Get MACs] button for more information.)" -ForegroundColor Gray
         }
     }
 
