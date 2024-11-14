@@ -932,9 +932,11 @@ function Restart-LabPc {
 
 function New-LabPcStop {
     <#
-        Schedule a new LabPC daily stop
+        Schedule a new LabPC daily stop at given local-time i.e. the
+        task’s execution time will adjust automatically with DST changes.
 
-        This cmdlet creates the new task StopThisComputer and if the task already exist, just adds the new stop time as a trigger to the task
+        This cmdlet creates the StopThisComputer task with the specified stop time as a trigger. 
+        If the task already exists, it adds the stop time as an additional trigger.
 
         New-LabPcStop -DailyTime '14:15'
     #>
@@ -944,27 +946,41 @@ function New-LabPcStop {
         [string]$DailyTime
     )
 
-    # Time parameter parsing
+    # -DailyTime parsing
     try {
-        $dailyTimeObj = [DateTime]::ParseExact($DailyTime, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
+        # Validate the time format
+        if (-not ($DailyTime -match "^\d{1,2}:\d{2}$")) {
+            throw "Invalid time format. Please use HH:mm format (e.g., '09:00')"
+        }
+        
+        $hours = [int]($DailyTime.Split(":")[0])
+        $minutes = [int]($DailyTime.Split(":")[1])
+        
+        # Validate hours and minutes ranges
+        if (($hours -lt 0 -or $hours -gt 23) -or ($minutes -lt 0 -or $minutes -gt 59)) {
+            throw "Hours must be between 0 and 23 and minutes must be between 0 and 59"
+        }
+        
+        # Create a local [DateTime] object based on the provided DailyTime parameter.
+        $dailyTimeObj = Get-Date -Hour $hours -Minute $minutes -Second 0 -Millisecond 0
     }
     catch {
-        Write-Error "-DailyTime $DailyTime must be in HH:mm format"
+        Write-Host "$_" -ForegroundColor Red
         return $null
     }
 
-    # Convert $DailyTimeObj to a TimeSpan object
-    $dailyStopTime = $dailyTimeObj.TimeOfDay
-
-    # Set the new daily stop time trigger
+    # Set the trigger
     $trigger = New-ScheduledTaskTrigger -Daily -At $dailyTimeObj
 
     # Set the action
     $action = New-ScheduledTaskAction -Execute 'Powershell' -Argument '-NoProfile -ExecutionPolicy Bypass -Command "& {Stop-Computer -Force}"'
 
+    # Extract the time from DateTime obj as TimeSpan object
+    $givenTimeTrigger = $dailyTimeObj.TimeOfDay
+
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
 
-        # Set principal contex for SYSTEM account to run as a service with with the highest privileges
+        # Set principal contex for SYSTEM account to run as a service with the highest privileges
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
         try {
@@ -979,22 +995,21 @@ function New-LabPcStop {
             Return $null
         }
 
-        # Get preset daily stop times as TimeSpan objets
-        $presetDailyStopTimes = @()
+        # Get all time triggers as TimeSpan objects
+        $allTimeTriggers = @()
         foreach ($trg in $stopThisComputerTask.Triggers) {
-            $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
+            $allTimeTriggers += ([datetime] $trg.StartBoundary).TimeOfDay
         }
 
-        # Check if the new stop time is already set
-        if ($using:dailyStopTime -in $presetDailyStopTimes) {
-            Write-Host "Stop at daily time $using:DailyTime already exist on $env:computername" -ForegroundColor Red
+        # Check if the new time trigger is already present
+        if ($using:givenTimeTrigger -in $allTimeTriggers) {
+            Write-Host "A stop at daily time $using:DailyTime already exist on $env:computername" -ForegroundColor Red
         } else {
             # Add the new stop time
             $stopThisComputerTask.Triggers += $using:trigger
             Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
-            Write-Host "New stop at daily time $using:DailyTime added to $env:computername" -ForegroundColor Green
+            Write-Host "A stop at daily time $using:DailyTime added to $env:computername" -ForegroundColor Green
         }
-
     }
 }
 
@@ -1011,7 +1026,7 @@ function Get-LabPcStop {
 
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
 
-        $formattedTime = "`n${env:COMPUTERNAME}:`n  "
+        $formattedTime = "${env:COMPUTERNAME} stop(s):`n  "
         try {
             # Get scheduled StopThisComputer task if exist
             $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
@@ -1023,18 +1038,18 @@ function Get-LabPcStop {
             Return $null
         }
 
-        # Get preset daily stop times as TimeSpan objets
-        $presetDailyStopTimes = @()
+        # Get all time triggers as TimeSpan objects
+        $allTimeTriggers = @()
         foreach ($trg in $stopThisComputerTask.Triggers) {
-            $presetDailyStopTimes += ([datetime] $trg.StartBoundary).TimeOfDay
+            $allTimeTriggers += ([datetime] $trg.StartBoundary).TimeOfDay
         }
 
         # Print the array in "hh:mm" format
-        foreach ($timeSpan in $presetDailyStopTimes) {
+        foreach ($timeSpan in $allTimeTriggers) {
             $formattedTime += "{0:hh\:mm\,\ }" -f $timeSpan
         }
         $formattedTime = $formattedTime.Substring(0, $formattedTime.Length - 2)
-        Write-Host $formattedTime
+        Write-Host $formattedTime "(local time)"
     }
 }
 
@@ -1061,8 +1076,8 @@ function Remove-LabPcStop {
         return $null
     }
 
-    # Convert $DailyTimeObj to a TimeSpan object
-    $dailyStopTime = $dailyTimeObj.TimeOfDay
+    # Extract the time from DateTime obj as TimeSpan object
+    $givenTimeTrigger = $dailyTimeObj.TimeOfDay
 
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
 
@@ -1079,22 +1094,21 @@ function Remove-LabPcStop {
         # Set principal contex for SYSTEM account to run as a service with with the highest privileges
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
-        # Remove the given time stop trigger
-        $triggers = @()
+        # Remove the given time trigger
+        $allTriggersButTheGiven = @()
         foreach ($trg in $stopThisComputerTask.Triggers) {
-            if (([datetime] $trg.StartBoundary).TimeOfDay -ne $Using:dailyStopTime) {
-                $triggers += $trg
+            if (([datetime] $trg.StartBoundary).TimeOfDay -ne $Using:givenTimeTrigger) {
+                $allTriggersButTheGiven += $trg
             }
         }
 
-
-        if ($triggers.Count -eq 0) {
+        if ($allTriggersButTheGiven.Count -eq 0) {
             Unregister-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Confirm:$false
             Write-Host "Last Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
             Write-Host " ... and StopThisComputer Task deleted`n"
         }
-        elseif ($triggers.count -lt $stopThisComputerTask.Triggers.count) {
-            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $triggers -Principal $principal | Out-Null
+        elseif ($allTriggersButTheGiven.count -lt $stopThisComputerTask.Triggers.count) {
+            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $allTriggersButTheGiven -Principal $principal | Out-Null
             Write-Host "Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
         } else {
             Write-Host "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
