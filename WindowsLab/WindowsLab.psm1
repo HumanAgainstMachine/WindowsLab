@@ -791,7 +791,11 @@ function Get-LabPcMac {
         Get-LabPcMac searches for LabPC Ethernet MAC addresses. When 
         a MAC address is found, it is saved to the configuration file. 
         MAC addresses are required for the Start-LabPc cmdlet to use 
-        Wake-on-LAN (WoL). 
+        Wake-on-LAN (WoL).
+
+    .NOTES
+        This cmdlet uses Write-Output to send messages to the pipeline,
+        allowing them to be displayed in the GUI console.
     #>
 
     Update-Config
@@ -799,6 +803,7 @@ function Get-LabPcMac {
     $currentlab.PcNames | ForEach-Object {
         try {
             Write-Output "`n$_"
+            $pcNameLen = $_.Length
 
             # Search for Physical, connected (Up), ethernet (standard 802.3) adapter
             $netAdapter = Get-NetAdapter -Physical -CimSession $_ -ErrorAction Stop |
@@ -809,25 +814,24 @@ function Get-LabPcMac {
             if ($netAdapter.Length -eq 0) {
                 # Connected, but not via an Ethernet adapter.
                 $foundMacs += $null
-                Write-Output "is not connected via an Ethernet adapter. Please connect."
+                Write-Output "is not connected via an Ethernet adapter. Please connect.`n$('-' * $pcNameLen)"
             }
             elseif ($netAdapter.Length -eq 1) {
                 # Connected via an Ethernet adapter.
                 $foundMacs += $netAdapter.MacAddress
-                Write-Output $netAdapter.MacAddress
+                Write-Output "$($netAdapter.MacAddress)`n$('-' * $pcNameLen)"
             }
             else { 
                 # Connected via multiple adapters, including Ethernet.
                 $foundMacs += $null
-                Write-Output "appears to have multiple Ethernet adapters. Disconnect all but one." 
-                Write-Output $netAdapter.MacAddress -Separator ', '
+                Write-Output "appears to have $($netAdapter.MacAddress.count) Ethernet adapters. Disconnect all but one.`n$('-' * $pcNameLen)"
             }
             
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # LabPC is unreachable because it is either off, not connected, or not ready.
             $foundMacs += $null
-            Write-Output "is unreachable because it is either off, not connected, or not ready."
+            Write-Output "is unreachable because it is either off, not connected, or not ready.`n$('-' * $pcNameLen)"
         }
         catch {
             Write-Output $_.exception.GetType().fullname
@@ -839,9 +843,9 @@ function Get-LabPcMac {
 
     # Save to JSON file
     $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath
-    Write-Output "`n`nFound MAC addresses have been saved and are available for the Start-LabPc cmdlet."
+    Write-Output "`n`nAny found MAC addresses have been saved and are available for Start-LabPc cmdlet."
     if ($foundMacs -contains $null) {
-        Write-Output "`n`nTo retrieve missing MAC addresses, resolve the issues above and press again [Get MACs] button."
+        Write-Output "`nTo retrieve any missing MAC addresses, resolve the issues above and press again [Get MACs] button."
     }
 }
 
