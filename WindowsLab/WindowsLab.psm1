@@ -909,6 +909,7 @@ function Stop-LabPc {
     )
 
     Test-NoLabPcName
+    Rename-TaskPath
     switch ($PSCmdlet.ParameterSetName) {
         'Set0' {Stop-Computer -ComputerName $currentlab.PcNames -Force} # no parameter provided
         'Set1' {Get-LabPcStop} # -When provided
@@ -916,6 +917,45 @@ function Stop-LabPc {
         'Set3' {Remove-LabPcStop -DailyTime $NoMoreAt} # -NoMoreAt provided
         'Set4' {Restart-LabPc} # -AndRestart provided
     }
+}
+
+function Rename-TaskPath {
+    <#
+    This function exists for backward compatibility and will be silently executed
+    for six months (November 15, 2024 - May 15, 2025) during each Stop-LabPc call.
+
+    - Moves the StopThisComputer task to the new folder and deletes the old folder.
+    - If the old folder is not found, no action is taken.
+    - If the old folder is empty, it is deleted.
+    #>
+    param ()
+
+    $oldFolderPath = "\WinLabAdmin\"
+    $newFolderPath = "\WindowsLab\"
+
+    Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        # Try to delete the folder and capture the output, actually delete the folder if empty
+        $result = & schtasks.exe /DELETE /TN "$using:oldFolderPath".Trim('\') /F 2>&1
+
+        if ($result -match "ERROR: The directory is not empty") {
+
+            # Create the new folder by adding and removing a temporary task, the new folder remain
+            $action = New-ScheduledTaskAction -Execute "cmd.exe"
+            $trigger = New-ScheduledTaskTrigger -AtStartup
+            Register-ScheduledTask -TaskName "TempTask" -TaskPath $using:newFolderPath -Action $action -Trigger $trigger -Force
+            Unregister-ScheduledTask -TaskName "TempTask" -TaskPath $using:newFolderPath -Confirm:$false     
+
+            # Move tasks from the old folder to the new folder
+            $tasks = Get-ScheduledTask -TaskPath $using:oldFolderPath -ErrorAction SilentlyContinue
+            foreach ($task in $tasks) {
+                Register-ScheduledTask -TaskName $task.TaskName -TaskPath $using:newFolderPath -InputObject $task -Force
+                Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $using:oldFolderPath -Confirm:$false
+            }
+
+            # Delete emptied old folder
+            & schtasks.exe /DELETE /TN "$using:oldFolderPath".Trim('\') /F 2>&1
+        }
+    } | Out-Null
 }
 
 function Restart-LabPc {
@@ -985,11 +1025,11 @@ function New-LabPcStop {
 
         try {
             # Get scheduled StopThisComputer task if exist
-            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
+            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -ErrorAction Stop
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # Register the task (-TaskPath is the folder)
-            Register-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Action $using:action -Trigger $using:trigger -Principal $principal | Out-Null
+            Register-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -Action $using:action -Trigger $using:trigger -Principal $principal | Out-Null
             Write-Host "First stop daily time $using:DailyTime just set on $env:computername" -ForegroundColor Green
             Write-Host " ... and StopThisComputer task set`n"
             Return $null
@@ -1007,7 +1047,7 @@ function New-LabPcStop {
         } else {
             # Add the new stop time
             $stopThisComputerTask.Triggers += $using:trigger
-            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
+            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
             Write-Host "A stop at daily time $using:DailyTime added to $env:computername" -ForegroundColor Green
         }
     }
@@ -1029,7 +1069,7 @@ function Get-LabPcStop {
         $formattedTime = "${env:COMPUTERNAME} stop(s):`n  "
         try {
             # Get scheduled StopThisComputer task if exist
-            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
+            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -ErrorAction Stop
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
@@ -1083,7 +1123,7 @@ function Remove-LabPcStop {
 
         try {
             # Get scheduled StopThisComputer task if exist
-            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -ErrorAction Stop
+            $stopThisComputerTask = Get-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -ErrorAction Stop
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
@@ -1103,12 +1143,12 @@ function Remove-LabPcStop {
         }
 
         if ($allTriggersButTheGiven.Count -eq 0) {
-            Unregister-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Confirm:$false
+            Unregister-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -Confirm:$false
             Write-Host "Last Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
             Write-Host " ... and StopThisComputer Task deleted`n"
         }
         elseif ($allTriggersButTheGiven.count -lt $stopThisComputerTask.Triggers.count) {
-            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WinLabAdmin\' -Trigger $allTriggersButTheGiven -Principal $principal | Out-Null
+            Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -Trigger $allTriggersButTheGiven -Principal $principal | Out-Null
             Write-Host "Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
         } else {
             Write-Host "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
