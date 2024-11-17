@@ -1,91 +1,135 @@
 # WindowsLab PowerShell Module
 
-**WindowsLab** is a PowerShell module designed to simplify the administration of a computer lab running Windows OS. It provides cmdlets for common tasks such as:
+**WindowsLab** is a PowerShell module designed to simplify the administration of computer labs with Windows PCs (10 or 11) connected to the same LAN.
 
-- Starting, restarting, and stopping all computers.
-- Updating date and time on all computers.
-- Creating and removing local accounts.
-- Changing passwords.
-- Disconnecting users.
-- Sending files to all computers at once.
+## Key Features
+
+- Start, restart, or stop all PCs remotely
+- Synchronize date and time across all PCs
+- Create and manage generic user accounts
+- Update passwords for generic accounts
+- Disconnect users from all PCs
+- Deploy files to all PCs
+
+**Note**: A **generic account** is a local account that exists on all lab PCs with identical username and password, typically used for standard, non-administrative purposes.
 
 ## Terminology
 
-**Lab**: The computer room with one AdminPC and multiple LabPCs, all running Windows (10 or 11) and connected via the same LAN.
+**AdminPC**:  
+The single administrator PC used for lab management.
 
-**AdminPC**: The main computer used for lab management.
+**LabPC**:  
+PCs used by lab users (e.g., students) with similar hardware and software configurations.
 
-**LabPC**: A computer in the lab, typically with similar hardware and software configurations.
+**LabAdmin**:  
+An administrator local account present on both the AdminPC and all LabPCs, configured with identical username and password across all machines.
 
-**LabAdmin**: The administrator of the lab, who has a local account with the same username and password on both the AdminPC and each LabPC.
+**LabUser**:  
+Generic accounts for lab users present on each LabPC. Multiple accounts can exist with usernames like *Student*, *Teacher*, or *User*.
 
-**LabUser**: A lab user with a local account on each LabPC, typically with usernames like *Student,* *Teacher,* or *Learner.*
+**Note**: In addition to **LabAdmin** and **LabUser** accounts, other account types can exist, such as personal user accounts or specialized administrator accounts for different tasks.
 
-## Getting the Lab Ready
+## Lab Setup Prerequisites
 
-Before using WindowsLab, manually create the **LabAdmin** account on each PC with the same username and password, and grant it administrator privileges (e.g., username: LabAdmin).
+Before installing WindowsLab, follow these steps:
 
-1. Log in to each LabAdmin account and eather run the script *GettingLabReady.ps1* or follow these steps:
-   - Install PowerShell version 7.1 or higher.
-   - Set the network to "Private" in Windows settings.
+1. Create the **LabAdmin** account on both the *AdminPC* and all *LabPCs*:
+   - Use identical username and password across all machines
+   - Grant administrator privileges
+   - Example username: LabAdmin
+
+2. For easier management, rename LabPCs using a numbered system (e.g., PC01, PC02, PC03). While optional, this naming convention simplifies lab administration.
+
+### Configuration Steps
+
+1. On each PC, log in to the **LabAdmin** account and complete these tasks:
+   - Install PowerShell 7 or higher
+   - Set the network to "Private" in Windows settings
    - Open PowerShell as Administrator and run:  
      ```powershell
      Enable-PSRemoting
      ```
-2. On the **AdminPC** only, run:
+
+2. On the **AdminPC** only, perform the above steps plus:
    ```powershell
    Set-Item -Path WSMan:\localhost\client\TrustedHosts -Value *
    ```
 
-**Disclaimer**: Ensure that the AdminPC is secured, and use a strong, secret password for the LabAdmin account.
+**Note**: You can automate the configuration steps using the *GettingLabReady.ps1* script:
 
-**Note**: You can download the *GettingLabReady.ps1* script from this website and run it on both the AdminPC and each LabPC to automate the three steps outlined in point 1.
+1. Download the script from this repository
+2. Open Windows PowerShell as administrator
+3. Navigate to the script's directory
+4. Execute:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File GettingLabReady.ps1
+   ```
+
+**Security Warning**: Ensure the AdminPC is properly secured and use a strong, unique password for the LabAdmin account.
 
 ## Module Installation
 
-WindowsLab depends on module *NtpTime* to take time from internet, it's required so install it.
+WindowsLab requires the [NtpTime](https://www.powershellgallery.com/packages/Ntptime) module for internet time synchronization. Install both modules on the AdminPC only.
 
-```powershell
-Install-Module -Name NtpTime
-```
-
-Now, you can install [WindowsLab](https://www.powershellgallery.com/packages/WindowsLab) from the Powershellgallery.
-
-1. Log in as **LabAdmin** on the AdminPC.
-2. Run:
+1. Log in as **LabAdmin** on the AdminPC
+2. Install the required modules:
    ```powershell
+   Install-Module -Name NtpTime
    Install-Module -Name WindowsLab
    ```
-3. Close and reopen the terminal, then run:
+3. Restart your PowerShell session to ensure the modules are properly loaded and verify the installation:
    ```powershell
    Get-Command -Module WindowsLab
    ```
-   You should see a list of available cmdlets if the installation was successful.
+   A list of available cmdlets indicates successful installation.
 
-## Cmdlets Overview
+## Available Cmdlets
 
-- `Deploy-Item` – Send files to all LabPCs.
-- `Disconnect-User` – Disconnect active users on LabPCs.
-- `New-LabUser` – Create a new local user on all LabPCs.
-- `Remove-LabUser` – Remove a local user from all LabPCs.
-- `Set-LabPcName` – Opens a GUI where you can input LabPC names. These names are saved for the module to reference, ensuring consistent identification of each LabPC.
-- `Set-LabUser` – Change LabUser settings on all LabPCs.
-- `Show-LabPcMac` – Searches for and displays the MAC addresses of all LabPCs, highlighting any issues such as mismatches or errors for troubleshooting.
-- `Start-LabPc` – Start LabPCs through WoL.
-- `Stop-LabPc` – Stop LabPCs.
-- `Sync-LabPcDate` – Sync date and time on all LabPCs.
-- `Test-LabPcPrompt` – Tests if each LabPC is ready to accept commands from the AdminPC, ensuring remote connectivity is properly established.
+- `Disconnect-User`  
+Disconnects all active users from LabPCs.
 
-## How It Works
+- `Deploy-Item`  
+Deploys files or folders to specified LabUser desktops across all LabPCs.
 
-WindowsLab uses PowerShell remoting, allowing you to execute commands on remote LabPCs as if you were physically there. When a command is run, it executes on the remote computer, with results returned to your AdminPC.
+- `New-LabUser`  
+Creates new generic accounts (LabUsers) on all LabPCs.
 
-## WoL
+- `Remove-LabUser`  
+Removes specified generic accounts from all LabPCs.
 
-WoL (Wake-on-LAN) is a networking standard for remotely powering on computers via wired Ethernet. It's preferred over Wake on Wireless LAN due to its greater reliability, security, and wider hardware support. Wired connections offer better stability and performance, making WoL more dependable for remote power-on tasks.
+- `Set-LabUser`  
+Updates LabUser passwords and privileges across all LabPCs.
 
-The WindowsLab Module's Start-LabPC function leverages Wake-on-LAN (WoL) technology to reliably turn on LabPCs.
+- `Start-LabPc`  
+Powers on all WoL-capable LabPCs simultaneously.
 
-## Notes
+- `Stop-LabPc`  
+Shuts down or restarts all LabPCs. Can schedule daily automatic shutdowns.
 
-I use this module to manage computer labs at the school where I work as an IT assistant.
+- `Sync-LabPcDate`  
+Synchronizes date and time across all LabPCs using internet time servers.
+
+- `Test-LabPcPrompt`  
+Verifies remote command connectivity between AdminPC and LabPCs.
+
+- `Set-LabPcName`  
+Launches a GUI for managing multiple labs, where you can define LabPC names and discover their MAC addresses. The stored configuration enables other cmdlets to identify lab PCs and supports WoL functionality.
+
+## Technical Overview
+
+WindowsLab utilizes PowerShell remoting to execute commands on remote LabPCs. Commands run on the remote machines with results returned to the AdminPC, enabling centralized management.
+
+## Wake-on-LAN (WoL) Support
+
+WoL enables remote power-on functionality via wired Ethernet. It's preferred over Wake-on-Wireless LAN (WoWLAN) for:
+- Higher reliability
+- Better security
+- Broader hardware compatibility
+
+To use the Start-LabPC cmdlet's WoL features:
+1. Verify WoL support in each LabPC's BIOS/UEFI settings
+2. Enable WoL if supported
+
+## Usage Note
+
+I developed and actively use this module to manage computer labs at the school where I work as an IT assistant.

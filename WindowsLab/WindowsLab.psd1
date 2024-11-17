@@ -12,7 +12,7 @@
 RootModule = '.\WindowsLab.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.1'
+ModuleVersion = '1.1.0'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Core')
@@ -31,14 +31,15 @@ Copyright = '(c) Human.Against.Machine. All rights reserved.'
 
 # Description of the functionality provided by this module
 Description = @'
-WindowsLab is a PowerShell module designed to simplify the administration of a computer lab running Windows OS. It provides cmdlets for common tasks such as:
+WindowsLab is a PowerShell module designed to simplify the administration of computer labs with Windows PCs (10 or 11) connected to the same LAN.
 
-- Starting, restarting, and stopping all computers.
-- Updating date and time on all computers.
-- Creating and removing local accounts.
-- Changing passwords.
-- Disconnecting users.
-- Sending files to all computers at once.
+Key Features:
+- Start, restart, or stop all PCs remotely
+- Synchronize date and time across all PCs
+- Create and manage generic user accounts
+- Update passwords for generic accounts
+- Disconnect users from all PCs
+- Deploy files to all PCs
 '@
 
 # Minimum version of the PowerShell engine required by this module
@@ -80,9 +81,9 @@ RequiredModules = @(@{ModuleName="NtpTime"; ModuleVersion="1.1"; Guid="7fb3dc99-
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
 FunctionsToExport = @('Stop-LabPc', 'Start-LabPc', 'Set-LabPcName',
-                     'Sync-LabPcDate', 'Test-LabPcPrompt', 
-                    'Disconnect-User', 'New-LabUser', 'Remove-LabUser', 
-                    'Set-LabUser', 'Deploy-Item', 'Show-LabPcMac')
+                     'Sync-LabPcDate', 'Test-LabPcPrompt',
+                    'Disconnect-User', 'New-LabUser', 'Remove-LabUser',
+                    'Set-LabUser', 'Deploy-Item')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()
@@ -121,24 +122,48 @@ PrivateData = @{
 
         # ReleaseNotes of this module
         ReleaseNotes = @'
-## [1.0.1] - 2024-10-07
-### Added
+[1.1.0] - 2024-11-17
+Added
+* Set-LabPcName:
+    - Introduced a new GUI with tabbed navigation, supporting multiple Labs.
+    - Added a [Get MACs] button for searching MAC addresses, with output displayed in an embedded console.
+* Rename-TaskPath cmdlet to silently move scheduled stop tasks from the old folder to the updated one.
+* Improved LabPC stop scheduling:
+    - Added validation for the provided time parameter.
+    - Set trigger times to local time, ensuring scheduled tasks automatically adjust for DST changes.
+
+Fixed
+* Fixed issue where zero Ethernet adapters were found when searching for MAC addresses.
+* Resolved errors in GettingLabReady.ps1; now sets the network to private without searching for a network adapter.
+* Prevented configuration loss during module updates by moving the config.json file from the WindowsLab installation folder to $env:APPDATA\WindowsLab.
+* Fixed handling of a single MAC address, ensuring it is treated as an array when saving the configuration.
+* Updated the task folder name for the scheduled stops.
+
+Changed
+* Enhanced management of permanent and session memory.
+* Improved user messages for both the terminal and GUI console.
+* Increased code readability with clearer comments, and more descriptive variable and function names.
+* Refined overall clarity of the README.md documentation.
+* Updated to save found MAC addresses individually, removing the requirement to retrieve all addresses simultaneously.
+
+[1.0.1] - 2024-10-07
+Added
 - GettingLabReady.ps1 script helps to automate each LabPC preparation.
 - Changelog to manifest.
 
-### Fixed
+Fixed
 - Typos in manifest description value, now use here-string.
 
-## [1.0.0] - 2024-10-05
-### Added
+[1.0.0] - 2024-10-05
+Added
 - Set-LabPcName cmdlet, opens a GUI to set LabPC names.
 
-### Changed
+Changed
 - Improved cmdlets names.
 - Updated overall documentation.
 
-## [0.9.0] - 2024-08-06
-### Initial Release
+[0.9.0] - 2024-08-06
+Initial Release
 - A group of cmdlets for managing a laboratory.
 '@
 
