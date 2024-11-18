@@ -938,10 +938,10 @@ function Rename-TaskPath {
     $newFolderPath = "\WindowsLab\"
 
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
-        # Try to delete the folder and capture the output, actually delete the folder if empty
-        $result = & schtasks.exe /DELETE /TN "$using:oldFolderPath".Trim('\') /F 2>&1
 
-        if ($result -match "ERROR: The directory is not empty") {
+        try {
+            # In both cases folder not exist or is empty raise an exception
+            $tasks = Get-ScheduledTask -TaskPath $using:oldFolderPath -ErrorAction Stop
 
             # Create the new folder by adding and removing a temporary task, the new folder remain
             $action = New-ScheduledTaskAction -Execute "cmd.exe"
@@ -955,8 +955,13 @@ function Rename-TaskPath {
                 Register-ScheduledTask -TaskName $task.TaskName -TaskPath $using:newFolderPath -InputObject $task -Force
                 Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $using:oldFolderPath -Confirm:$false
             }
+        }
+        catch {
+            # Catch exception and do nothing, this avoid display exception to console
+        }
+        finally {# At this point the task folder not exist or is empty
 
-            # Delete emptied old folder
+            # Delete the folder if empty, returns error if not exixt
             & schtasks.exe /DELETE /TN "$using:oldFolderPath".Trim('\') /F 2>&1
         }
     } | Out-Null

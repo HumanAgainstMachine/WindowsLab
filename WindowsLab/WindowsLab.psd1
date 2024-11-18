@@ -12,7 +12,7 @@
 RootModule = '.\WindowsLab.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.1.0'
+ModuleVersion = '1.1.1'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Core')
@@ -122,6 +122,10 @@ PrivateData = @{
 
         # ReleaseNotes of this module
         ReleaseNotes = @'
+[1.1.1.] - 2024-11-18
+Fixed
+- Rename-TaskPath cmdlet issue on non-English systems by removing dependency on English output from schtasks.exe.
+
 [1.1.0] - 2024-11-17
 Added
 * Set-LabPcName:
@@ -166,7 +170,6 @@ Changed
 Initial Release
 - A group of cmdlets for managing a laboratory.
 '@
-
         # Prerelease string of this module
         # Prerelease = ''
 
