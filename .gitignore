@@ -1,2 +1,5 @@
 # ignore config files
 config.json
+
+# Ignore VS Code settings and debug configurations
+.vscode/
