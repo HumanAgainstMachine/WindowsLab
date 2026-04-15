@@ -25,13 +25,102 @@ else {
 
 # -- End Init Vars --
 
+function Write-Terminal {
+    [CmdletBinding()]
+    param (
+        [Parameter(Position=0, ValueFromPipeline=$true)]
+        [string[]]$Text,
+
+        [Parameter(Position=1)]
+        [ValidateSet('Black', 'DarkBlue', 'DarkGreen', 'DarkCyan', 'DarkRed', 'DarkMagenta', 'DarkYellow', 'Gray', 'DarkGray', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Yellow', 'White')]
+        [string[]]$ForegroundColor,
+
+        [Parameter(Position=2)]
+        [ValidateSet('Black', 'DarkBlue', 'DarkGreen', 'DarkCyan', 'DarkRed', 'DarkMagenta', 'DarkYellow', 'Gray', 'DarkGray', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Yellow', 'White')]
+        [string[]]$BackgroundColor,
+
+        [switch]$Italic,
+        [switch]$Underline,
+        
+        [switch]$NoWrap
+    )
+
+    begin {
+        $esc = [char]27
+        $fgMap = @{
+            'Black'='30'; 'DarkRed'='31'; 'DarkGreen'='32'; 'DarkYellow'='33'
+            'DarkBlue'='34'; 'DarkMagenta'='35'; 'DarkCyan'='36'; 'Gray'='37'
+            'DarkGray'='90'; 'Red'='91'; 'Green'='92'; 'Yellow'='93'
+            'Blue'='94'; 'Magenta'='95'; 'Cyan'='96'; 'White'='97'
+        }
+        $bgMap = @{
+            'Black'='40'; 'DarkRed'='41'; 'DarkGreen'='42'; 'DarkYellow'='43'
+            'DarkBlue'='44'; 'DarkMagenta'='45'; 'DarkCyan'='46'; 'Gray'='47'
+            'DarkGray'='100'; 'Red'='101'; 'Green'='102'; 'Yellow'='103'
+            'Blue'='104'; 'Magenta'='105'; 'Cyan'='106'; 'White'='107'
+        }
+    }
+
+    process {
+        if ($null -eq $Text -or $Text.Count -eq 0 -or ($Text.Count -eq 1 -and $Text[0] -eq '')) {
+            Write-Host ""
+            return
+        }
+
+        $outputString = ""
+        $visibleLength = 0
+        $styleCodes = @()
+        if ($Italic)    { $styleCodes += '3' }
+        if ($Underline) { $styleCodes += '4' }
+
+        for ($i = 0; $i -lt $Text.Count; $i++) {
+            $ansiCodes = @($styleCodes)
+
+            if ($ForegroundColor -and $ForegroundColor.Count -gt 0) {
+                $fgName = $ForegroundColor[$i % $ForegroundColor.Count]
+                $ansiCodes += $fgMap[$fgName]
+            }
+
+            if ($BackgroundColor -and $BackgroundColor.Count -gt 0) {
+                $bgName = $BackgroundColor[$i % $BackgroundColor.Count]
+                $ansiCodes += $bgMap[$bgName]
+            }
+
+            $sequence = ""
+            if ($ansiCodes.Count -gt 0) {
+                $joinedCodes = $ansiCodes -join ';'
+                $sequence = "$esc[$($joinedCodes)m"
+            }
+
+            $reset = "$esc[0m"
+
+            # Add space separator for multiple array elements
+            if ($i -gt 0) { 
+                $outputString += " " 
+                $visibleLength += 1
+            }
+
+            $outputString += "${sequence}$($Text[$i])${reset}"
+            $visibleLength += $Text[$i].Length
+        }
+
+        # Handle -NoWrap (Truncation)
+        $prefix = if ($NoWrap) { "$esc[?7l" } else { "" }
+        $suffix = if ($NoWrap) { "$esc[?7h" } else { "" }
+
+        # Print final string with padding
+        Write-Host "${prefix}${padding}${outputString}${suffix}"
+    }
+}
+
 function Test-NoLabPcName {
     # Test if LabPc names are not set in config.json
     param ()
-    Write-Host "Selected Lab: $($currentLab.Name) `n"  -ForegroundColor DarkCyan
+    Write-Terminal -Text "Lab name: $($currentLab.Name)" -ForegroundColor DarkCyan
+    Write-Terminal
     if ($currentlab.PcNames.Length -eq 0) {
-        Write-Host "LabPc names not found" -ForegroundColor Red
-        Write-Host "Run Set-LabPcName to set LabPc names`n" -ForegroundColor DarkYellow
+        Write-Terminal -Text "LabPc names not found" -ForegroundColor Red
+        Write-Terminal -Text "Run Set-LabPcName to set LabPc names`n" -ForegroundColor DarkYellow
         break
     }
 }
@@ -369,12 +458,10 @@ function Test-LabPcPrompt {
     foreach ($pc in $currentlab.PcNames) {
         try {
             Test-WSMan -ComputerName $pc -ErrorAction Stop | Out-Null
-            Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
-            Write-Host "ready" -ForegroundColor Green
+            Write-Terminal -Text "$pc", "ready" -ForegroundColor DarkYellow, Green 
         }
         catch [System.InvalidOperationException] {
-            Write-Host "$pc " -ForegroundColor DarkYellow -NoNewline
-            Write-Host "not ready" -ForegroundColor Red
+            Write-Terminal -Text "$pc", "not ready" -ForegroundColor DarkYellow, Red 
         }
     }
 }
@@ -399,25 +486,28 @@ function Sync-LabPcDate {
 
     # check if NtpTime module is installed
     if ($null -eq (Get-Module -ListAvailable -Name NtpTime)) {
-        Write-Host "`nNtpTime Module missing. Install the module with:" -ForegroundColor Yellow
-        Write-Host "    Install-Module -Name NtpTime`n"
+        Write-Terminal -Text "`nNtpTime Module missing. Install the module with:" -ForegroundColor Yellow
+        Write-Terminal -Text "    Install-Module -Name NtpTime`n"
         Break
     }
 
     # get datetime from default NTP server
     try {
         $currentDate = (Get-NtpTime -MaxOffset 60000).NtpTime
-        Write-Host "`n(NTP time: $currentdate)`n" -ForegroundColor Yellow
+        Write-Terminal -Text "Current NTP time: $currentdate" -ForegroundColor Yellow
+        Write-Terminal
 
         Set-Date -Date $currentDate | Out-Null
-        Write-Host "MasterComputer synchronized" -ForegroundColor Green
+        Write-Terminal -Text "MasterPC", "synced" -ForegroundColor DarkYellow, Green
+        Write-Terminal
         Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+            ${function:Write-Terminal} = ${using:function:Write-Terminal}
             Set-Date -Date $Using:currentDate | Out-Null
-            Write-Host "$env:computername synchronized" -ForegroundColor Green
+            Write-Terminal -Text "$env:computername", "synced" -ForegroundColor DarkYellow, Green
         }
     }
     catch {
-        Write-Host "`nTry again later ..." -ForegroundColor Yellow
+        Write-Terminal -Text "   Try again later ..."
     }
 }
 
@@ -441,9 +531,11 @@ function Deploy-Item {
     Resolve-Path -Path $Path -ErrorAction Stop | Out-Null
 
     $currentlab.PcNames | ForEach-Object -Parallel {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
         $session = New-PSSession -ComputerName $_
         $labUserprofilePath = Invoke-Command -Session $session -ScriptBlock {
             param($UName)
+            ${function:Write-Terminal} = ${using:function:Write-Terminal}
             try {
                 # LabUser exist?
                 $labUser = Get-LocalUser -Name $UName -ErrorAction Stop
@@ -453,13 +545,13 @@ function Deploy-Item {
                                     Where-Object { $_.SID -eq $labUser.SID.Value }).LocalPath
 
                 if ($null -eq $labUserProfilePath) {
-                    Write-Host "$UName exist but never signed-in on $env:computername" -ForegroundColor Yellow
-                    Write-Host "Deployment to $env:computername failed" -ForegroundColor Red
+                    Write-Terminal -Text "$UName exist but never signed-in on $env:computername" -ForegroundColor Yellow
+                    Write-Terminal -Text "Deployment to $env:computername failed" -ForegroundColor Red
                 }
             }
             catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-                Write-Host "$UName NOT exist on $env:computername" -ForegroundColor Yellow
-                Write-Host "Deployment to $env:computername failed" -ForegroundColor Red
+                Write-Terminal -Text "$UName NOT exist on $env:computername" -ForegroundColor Yellow
+                Write-Terminal -Text "Deployment to $env:computername failed" -ForegroundColor Red
                 $labUserProfilePath = $null
             }
             finally {
@@ -470,7 +562,7 @@ function Deploy-Item {
         if ($null -ne $labUserprofilePath) {
             $labUserDesktopPath = Join-Path -Path $labUserprofilePath -ChildPath 'Desktop'
             Copy-Item -Path $using:Path -Destination $labUserDesktopPath -ToSession $session -Recurse -Force
-            Write-Host "Deployment to $_ success" -ForegroundColor Green
+            Write-Terminal -Text "Deployment to $_ success" -ForegroundColor Green
         }
         Remove-PSSession $session
     } -ThrottleLimit 5
@@ -496,6 +588,7 @@ function Disconnect-User {
 
     Test-NoLabPcName
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
         $ErrorActionPreference = 'Stop' # NOTE: it is valid only for this function scope
         try {
             # check if quser command exist
@@ -506,15 +599,15 @@ function Disconnect-User {
             ForEach-Object {
                 # logoff by session ID
                 logoff ($_ -split "\s+")[2]
-                Write-Host "User", ($_ -split "\s+")[1], "logged out $($env:COMPUTERNAME)"  -ForegroundColor Green
+                Write-Terminal -Text "User", ($_ -split "\s+")[1], "logged out $($env:COMPUTERNAME)" -ForegroundColor Green
             }
         }
         catch [System.Management.Automation.CommandNotFoundException] {
-            Write-Host "Cannot disconnect any user: quser command not found on $env:computername" -ForegroundColor Red
-            Write-Host "is it a windows Home edition?"
+            Write-Terminal -Text "Cannot disconnect any user: quser command not found on $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "is it a windows Home edition?"
         }
         catch {
-            Write-host "No user logged in $($env:COMPUTERNAME)" -ForegroundColor Yellow
+            Write-Terminal -Text "No user logged in $($env:COMPUTERNAME)" -ForegroundColor Yellow
         }
     }
 }
@@ -547,6 +640,7 @@ function New-LabUser {
 
     Test-NoLabPcName
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
         try {
             $blankPassword = [securestring]::new()
             New-LocalUser -Name $Using:UserName -Password $blankPassword -PasswordNeverExpires `
@@ -554,10 +648,10 @@ function New-LabUser {
 
             Add-LocalGroupMember -Group "Users" -Member $Using:UserName
 
-            Write-Host "$Using:UserName created on $env:computername" -ForegroundColor Green
+            Write-Terminal -Text "$Using:UserName created on $env:computername" -ForegroundColor Green
         }
         catch [Microsoft.PowerShell.Commands.UserExistsException] {
-          Write-Host "$Using:UserName already exist on $env:computername" -ForegroundColor Yellow
+            Write-Terminal -Text "$Using:UserName already exist on $env:computername" -ForegroundColor Yellow
         }
     }
 }
@@ -584,6 +678,7 @@ function Remove-LabUser {
 
     Test-NoLabPcName
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
         try {
             # check if quser command exist
             Get-Command -Name quser -ErrorAction Stop | Out-Null
@@ -594,13 +689,13 @@ function Remove-LabUser {
             ForEach-Object {
                 # logoff by session ID
                 logoff ($_ -split "\s+")[2]
-                Write-Host "User", ($_ -split "\s+")[1], "logged out $($env:COMPUTERNAME)"  -ForegroundColor Green
+                Write-Terminal -Text "User", ($_ -split "\s+")[1], "logged out $($env:COMPUTERNAME)" -ForegroundColor Green
             }
             $ErrorActionPreference = 'Continue'
         }
         catch [System.Management.Automation.CommandNotFoundException] {
-            Write-Host "quser command not found on $env:computername" -ForegroundColor Red
-            Write-Host "is it a windows Home edition? I'll try to remove $using:UserName anyway ...`n"
+            Write-Terminal -Text "quser command not found on $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "is it a windows Home edition? I'll try to remove $using:UserName anyway ...`n"
         }
 
         try {
@@ -612,11 +707,11 @@ function Remove-LabUser {
             # Remove %USERPROFILE% folder and registry entry if exist
             Get-CimInstance -Class Win32_UserProfile | Where-Object { $_.SID -eq $localUser.SID.Value } | Remove-CimInstance
 
-            Write-Host "$Using:UserName removed on $env:computername" -ForegroundColor Green
+            Write-Terminal -Text "$Using:UserName removed on $env:computername" -ForegroundColor Green
         }
         catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
             <#Do this if a terminating exception happens#>
-            Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
+            Write-Terminal -Text "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
         }
     }
 }
@@ -657,32 +752,33 @@ function Set-LabUser {
                     $password = Read-Host -Prompt 'Enter the new password' -AsSecureString
                 }
                 Invoke-Command -ComputerName $currentlab.PcNames  -ScriptBlock {
+                    ${function:Write-Terminal} = ${using:function:Write-Terminal}
                     try {
                         if ($Using:SetPassword.IsPresent) {
                             # change password
                             Set-LocalUser -Name $Using:UserName -Password $Using:Password -PasswordNeverExpires $True `
                             -UserMayChangePassword $False -ErrorAction Stop
-                            Write-Host "$Using:UserName on $env:computername password changed" -ForegroundColor Green
+                            Write-Terminal -Text "$Using:UserName on $env:computername password changed" -ForegroundColor Green
                         }
                         if ($Using:AccountType -eq 'Administrator') {
                             # change to an Administrator
                             Add-LocalGroupMember -Group "Administrators" -Member $Using:UserName -ErrorAction Stop
-                            Write-Host "$Using:UserName on $env:computername is now an Administrator" -ForegroundColor Green
+                            Write-Terminal -Text "$Using:UserName on $env:computername is now an Administrator" -ForegroundColor Green
                         }
                         if ($Using:AccountType -eq 'StandardUser') {
                             # change to a Standard User
                             Remove-LocalGroupMember -Group "Administrators" -Member $Using:UserName -ErrorAction Stop
-                            Write-Host "$Using:UserName on $env:computername is now a Standard User" -ForegroundColor Green
+                            Write-Terminal -Text "$Using:UserName on $env:computername is now a Standard User" -ForegroundColor Green
                         }
                     }
                     catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-                        Write-Host "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
+                        Write-Terminal -Text "$Using:UserName NOT exist on $env:computername" -ForegroundColor Yellow
                     }
                     catch [Microsoft.PowerShell.Commands.MemberExistsException] {
-                        Write-Host "$Using:UserName on $env:computername is already an Administrator" -ForegroundColor Yellow
+                        Write-Terminal -Text "$Using:UserName on $env:computername is already an Administrator" -ForegroundColor Yellow
                     }
                     catch [Microsoft.PowerShell.Commands.MemberNotFoundException] {
-                        Write-Host "$Using:UserName on $env:computername is already a Standard User" -ForegroundColor Yellow
+                        Write-Terminal -Text "$Using:UserName on $env:computername is already a Standard User" -ForegroundColor Yellow
                     }
                     catch {
                         $_.exception.GetType().fullname
@@ -708,6 +804,7 @@ function Backup-LabUserDesktop {
         [string]$UserName
     )
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -726,16 +823,16 @@ function Backup-LabUserDesktop {
             Remove-Item -Path $labPcPath -Force -Recurse -ErrorAction SilentlyContinue # delete any previous saved desktop
             Copy-Item -Path "$userDesktopPath\" -Destination $labPcPath -Recurse -Force
 
-            Write-Host "$Using:Username Desktop saved for $env:computername" -ForegroundColor Green
+            Write-Terminal -Text "$Using:Username Desktop saved for $env:computername" -ForegroundColor Green
         }
         catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-            Write-Host "$Using:UserName @ $env:computername does NOT exist" -ForegroundColor Yellow
-            Write-Host "$Using:Username Desktop save failed for $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "$Using:UserName @ $env:computername does NOT exist" -ForegroundColor Yellow
+            Write-Terminal -Text "$Using:Username Desktop save failed for $env:computername" -ForegroundColor Red
         }
         catch [System.Management.Automation.ParameterBindingException] {
             # user exist USERPROFILE path no
-            Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
-            Write-Host "$Using:Username Desktop save failed for $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
+            Write-Terminal -Text "$Using:Username Desktop save failed for $env:computername" -ForegroundColor Red
         }
     }
 }
@@ -752,6 +849,7 @@ function Restore-LabUserDesktop {
         [string]$UserName
     )
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
         try {
             # get specified Lab user
             $localUser = Get-LocalUser -Name $Using:UserName -ErrorAction Stop
@@ -766,15 +864,15 @@ function Restore-LabUserDesktop {
             $sourcePath = Join-Path -Path $env:SystemDrive -ChildPath "LabPc"
             Copy-Item -Path "$sourcePath\*" -Destination $userDesktopPath -Recurse -Force
 
-            Write-Host "$Using:Username Desktop restored for $env:computername" -ForegroundColor Green
+            Write-Terminal -Text "$Using:Username Desktop restored for $env:computername" -ForegroundColor Green
         }
         catch [Microsoft.PowerShell.Commands.UserNotFoundException] {
-            Write-Host "$Using:UserName @ $env:computername does NOT exist" -ForegroundColor Yellow
-            Write-Host "$Using:Username Desktop restore failed for $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "$Using:UserName @ $env:computername does NOT exist" -ForegroundColor Yellow
+            Write-Terminal -Text "$Using:Username Desktop restore failed for $env:computername" -ForegroundColor Red
         }
         catch [System.Management.Automation.ParameterBindingException] {
-            Write-Host "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
-            Write-Host "$Using:Username Desktop restore failed for $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "$Using:UserName exist but never signed-in on $env:computername" -ForegroundColor Yellow
+            Write-Terminal -Text "$Using:Username Desktop restore failed for $env:computername" -ForegroundColor Red
         }
     }
 }
@@ -864,7 +962,7 @@ function Start-LabPc {
     param ()
 
     Test-NoLabPcName
-    Write-Host "Remember, Start-LabPc works only if the LabPCs support WoL (Wake-on-LAN)." -ForegroundColor DarkYellow
+    Write-Terminal -Text "Remember, Start-LabPc works only if the LabPCs support WoL (Wake-on-LAN)." -ForegroundColor DarkYellow
 
     # Send Magic Packet over LAN
     for ($i = 0; $i -lt $currentlab.PcNames.Count; $i++) {
@@ -877,11 +975,11 @@ function Start-LabPc {
             $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
             $UdpClient.Send($MagicPacket,$MagicPacket.Length) | Out-Null
             $UdpClient.Close()
-            Write-Host $PcName, "Started" -ForegroundColor Green
+            Write-Terminal -Text $PcName, "Started" -ForegroundColor DarkYellow, Green
         }
         else {
-            Write-Host $PcName, "is missing MAC Address." -ForegroundColor Red
-            Write-host "(Run Set-LabPcNames and press [Get MACs] button for more information.)" -ForegroundColor Gray
+            Write-Terminal -Text $PcName, "is missing MAC Address." -ForegroundColor Red
+            Write-Terminal -Text "(Run Set-LabPcNames and press [Get MACs] button for more information.)" -ForegroundColor Gray
         }
     }
 
@@ -1014,7 +1112,7 @@ function New-LabPcStop {
         $dailyTimeObj = Get-Date -Hour $hours -Minute $minutes -Second 0 -Millisecond 0
     }
     catch {
-        Write-Host "$_" -ForegroundColor Red
+        Write-Terminal -Text "$_" -ForegroundColor Red
         return $null
     }
 
@@ -1028,6 +1126,7 @@ function New-LabPcStop {
     $givenTimeTrigger = $dailyTimeObj.TimeOfDay
 
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
 
         # Set principal contex for SYSTEM account to run as a service with the highest privileges
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
@@ -1039,8 +1138,8 @@ function New-LabPcStop {
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # Register the task (-TaskPath is the folder)
             Register-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -Action $using:action -Trigger $using:trigger -Principal $principal | Out-Null
-            Write-Host "First stop daily time $using:DailyTime just set on $env:computername" -ForegroundColor Green
-            Write-Host " ... and StopThisComputer task set`n"
+            Write-Terminal -Text "First stop daily time $using:DailyTime just set on $env:computername" -ForegroundColor Green
+            Write-Terminal -Text " ... and StopThisComputer task set`n"
             Return $null
         }
 
@@ -1052,12 +1151,12 @@ function New-LabPcStop {
 
         # Check if the new time trigger is already present
         if ($using:givenTimeTrigger -in $allTimeTriggers) {
-            Write-Host "A stop at daily time $using:DailyTime already exist on $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "A stop at daily time $using:DailyTime already exist on $env:computername" -ForegroundColor Red
         } else {
             # Add the new stop time
             $stopThisComputerTask.Triggers += $using:trigger
             Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -Trigger $stopThisComputerTask.Triggers -Principal $principal | Out-Null
-            Write-Host "A stop at daily time $using:DailyTime added to $env:computername" -ForegroundColor Green
+            Write-Terminal -Text "A stop at daily time $using:DailyTime added to $env:computername" -ForegroundColor Green
         }
     }
 }
@@ -1074,6 +1173,7 @@ function Get-LabPcStop {
     param ()
 
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
 
         $formattedTime = "${env:COMPUTERNAME} stop(s):`n  "
         try {
@@ -1083,7 +1183,7 @@ function Get-LabPcStop {
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
             $formattedTime += "None"
-            Write-Host $formattedTime
+            Write-Terminal -Text $formattedTime
             Return $null
         }
 
@@ -1098,7 +1198,7 @@ function Get-LabPcStop {
             $formattedTime += "{0:hh\:mm\,\ }" -f $timeSpan
         }
         $formattedTime = $formattedTime.Substring(0, $formattedTime.Length - 2)
-        Write-Host $formattedTime "(local time)"
+        Write-Terminal -Text $formattedTime, "(local time)"
     }
 }
 
@@ -1129,6 +1229,7 @@ function Remove-LabPcStop {
     $givenTimeTrigger = $dailyTimeObj.TimeOfDay
 
     Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
+        ${function:Write-Terminal} = ${using:function:Write-Terminal}
 
         try {
             # Get scheduled StopThisComputer task if exist
@@ -1136,7 +1237,7 @@ function Remove-LabPcStop {
         }
         catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
             # $_.exception.GetType().fullname
-            Write-Host "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
             Return $null
         }
 
@@ -1153,14 +1254,14 @@ function Remove-LabPcStop {
 
         if ($allTriggersButTheGiven.Count -eq 0) {
             Unregister-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -Confirm:$false
-            Write-Host "Last Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
-            Write-Host " ... and StopThisComputer Task deleted`n"
+            Write-Terminal -Text "Last Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
+            Write-Terminal -Text " ... and StopThisComputer Task deleted`n"
         }
         elseif ($allTriggersButTheGiven.count -lt $stopThisComputerTask.Triggers.count) {
             Set-ScheduledTask -TaskName:'StopThisComputer' -TaskPath:'\WindowsLab\' -Trigger $allTriggersButTheGiven -Principal $principal | Out-Null
-            Write-Host "Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
+            Write-Terminal -Text "Stop daily time $Using:DailyTime removed on $env:computername" -ForegroundColor Green
         } else {
-            Write-Host "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
+            Write-Terminal -Text "Stop daily time $Using:DailyTime not exist on $env:computername" -ForegroundColor Red
         }
 
     }
