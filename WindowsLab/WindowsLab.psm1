@@ -469,7 +469,7 @@ function Test-LabPcPrompt {
 function Sync-LabPcDate {
     <#
     .SYNOPSIS
-        Sync the date with the NTP time for each computer.
+        Sync MasterComputer date with NTP time and then sync each LabPC date
 
         .EXAMPLE
         Sync-LabPcDate
@@ -498,13 +498,43 @@ function Sync-LabPcDate {
         Write-Terminal
 
         Set-Date -Date $currentDate | Out-Null
-        Write-Terminal -Text "MasterPC", "synced" -ForegroundColor DarkYellow, Green
-        Write-Terminal
-        Invoke-Command -ComputerName $currentLab.PcNames -ScriptBlock {
-            ${function:Write-Terminal} = ${using:function:Write-Terminal}
-            Set-Date -Date $Using:currentDate | Out-Null
-            Write-Terminal -Text "$env:computername", "synced" -ForegroundColor DarkYellow, Green
+        Write-Terminal -Text "PCL00", "synced", "(Master PC)" -ForegroundColor DarkYellow, Green, DarkYellow
+
+        $job = Invoke-Command -ComputerName $currentLab.PcNames -AsJob -ScriptBlock {
+            Set-Date -Date $Using:currentDate
         }
+
+        # Total number of child jobs
+        $total = $job.ChildJobs.Count        
+
+        # Monitor the Job collection
+        while ($job.State -eq 'Running') {
+            $completed = ($job.ChildJobs | Where-Object { $_.State -eq 'Completed' }).Count
+            
+            $percent = ($completed / $total) * 100
+            
+            Write-Progress -Activity "Syncing" `
+                        -Status "$completed of $total computers" `
+                        -PercentComplete $percent
+            
+            Start-Sleep -Milliseconds 500
+        }
+
+        # Cleanup and retrieve output
+        Write-Progress -Activity "Running Remote Tasks" -Completed
+        $results = Receive-Job -Job $job -ErrorAction SilentlyContinue
+        Remove-Job -Job $job
+
+        # Show syncing results
+        foreach ($pc in $currentLab.PcNames) {
+            if ($pc -in $results.PSComputerName) {
+                Write-Terminal -Text "$pc", "synced" -ForegroundColor DarkYellow, Green
+            }
+            else {
+                Write-Terminal -Text "$pc", "not synced" -ForegroundColor DarkYellow, Red
+            }
+        }
+        
     }
     catch {
         Write-Terminal -Text "   Try again later ..."
